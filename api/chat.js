@@ -1,5 +1,3 @@
-[file name]: api/chat.js
-[file content begin]
 const axios = require('axios');
 
 module.exports = async (req, res) => {
