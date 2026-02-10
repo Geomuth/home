@@ -115,4 +115,3 @@ Keep responses clear and actionable. Use examples when helpful. Format your resp
         });
     }
 };
-[file content end]
