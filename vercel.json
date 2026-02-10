@@ -1,13 +1,4 @@
 {
-  "version": 2,
-  "buildCommand": "npm install",
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "public": true,
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  "version": 2
 }
  
