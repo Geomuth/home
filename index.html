@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechGeo</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h1>TechGeo</h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#home" class="nav-link active">Home</a></li>
+            </ul>
+            <div class="hamburger">
+                <i class="fa-solid fa-bars"></i>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <h2>Welcome to TechGeo</h2>
+            <p>Your Gateway to Powered Technology Solutions</p>
+            <button class="cta-button" onclick="document.getElementById('ai-chat').scrollIntoView({behavior: 'smooth'})">explore with our Assistant</button>
+        </div>
+    </section>
+
+    <!-- Search Section -->
+    <section id="search-section" class="search-section">
+        <div class="container">
+            <h2>Search & Explore</h2>
+            <div class="search-container">
+                <input type="text" id="searchInput" class="search-bar" placeholder="Search...">
+                <button id="searchBtn" class="search-btn">Search</button>
+            </div>
+            <div id="searchResults" class="search-results"></div>
+        </div>
+    </section>
+
+    <!-- AI Chat Message Icon -->
+    <div class="message" id="message"><i class="fa-solid fa-message"></i></div>
+
+    <!-- AI Chat Modal (Hidden by default) -->
+    <div id="ai-chat" class="ai-chat-modal">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h3>✳️ TechGeo AI Assistant</h3>
+                <p>Ask me what you like to know about Techgeo</p>
+                <button class="chat-close" id="chatClose">&times;</button>
+            </div>
+            <div id="chatBox" class="chat-box">
+                <div class="chat-message bot-message">
+                    <p>Hi! I'm TechGeo AI. How can I help you today?</p>
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="userInput" class="chat-input" placeholder="Type your question...">
+                <button id="sendBtn" class="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Section -->
+    
+    <!-- About Section -->
+    
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 TechGeo. All rights reserved.</p>
+            <p>Powered by AI | Built with ❤️ for tech enthusiasts</p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
