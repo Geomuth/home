@@ -218,15 +218,19 @@ app.use((err, req, res, next) => {
 // ===================== SERVER START =====================
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`
+
+if (require.main === module) {
+    // Local development
+    app.listen(PORT, () => {
+        console.log(`
 ╔════════════════════════════════════════╗
 ║     🚀 TechGeo Server Started 🚀      ║
 ║   http://localhost:${PORT}          ║
 ╚════════════════════════════════════════╝
     `);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`OpenAI Configured: ${process.env.OPENAI_API_KEY ? '✓' : '✗'}`);
-});
+        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`OpenAI Configured: ${process.env.OPENAI_API_KEY ? '✓' : '✗'}`);
+    });
+}
 
 module.exports = app;
