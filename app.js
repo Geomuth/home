@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSearch();
     setupScrollSpy();
     initializeMessageIcon();
-});
+}); 
 
 function initializeMessageIcon() {
     const messageIcon = document.getElementById('message');
