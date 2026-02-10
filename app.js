@@ -1,6 +1,3 @@
-// ===================== INITIALIZATION =====================
-
-// Navigation
 document.addEventListener('DOMContentLoaded', function() {
     initializeNavigation();
     initializeChatbot();
@@ -108,22 +105,4 @@ function initializeChatbot() {
 function escapeHtml(text) {
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
     return text.replace(/[&<>"']/g, (m) => map[m]);
-}
-
-// ===================== CONTACT FORM =====================
-
-function initializeContactForm() {
-    // Contact form removed - user will add their own HTML/CSS
-}
-
-// Utility function to escape HTML
-function escapeHtml(text) {
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.replace(/[&<>"']/g, m => map[m]);
 }
