@@ -25,11 +25,58 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date(),
         service: 'TechGeo AI Assistant',
         aiProvider: 'Google Gemini',
-        aiConfigured: !!process.env.GEMINI_API_KEY
+        aiConfigured: !!process.env.GEMINI_API_KEY,
+        environment: process.env.NODE_ENV || 'development'
     });
 });
 
-// ===================== LOCAL DEVELOPMENT ONLY =====================
+// Test endpoint to verify API connectivity
+app.get('/api/test-gemini', async (req, res) => {
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'GEMINI_API_KEY not set' });
+    }
+    
+    try {
+        // Simple test request
+        const testUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        const axios = require('axios');
+        
+        const response = await axios.post(testUrl, {
+            contents: [{
+                parts: [{ text: "Hello" }]
+            }]
+        }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
+        });
+        
+        res.json({
+            success: true,
+            message: 'Gemini API is reachable',
+            model: 'gemini-1.5-flash',
+            response: response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No text in response'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Gemini API test failed',
+            error: error.response?.data || error.message,
+            suggestion: 'Try gemini-pro model instead'
+        });
+    }
+});
+
+// Handle 404 for API routes
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
+});
+
+// Handle all other routes
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// ===================== START SERVER =====================
 
 const PORT = process.env.PORT || 3000;
 
@@ -44,8 +91,9 @@ if (require.main === module) {
         console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`Gemini AI Configured: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
         console.log(`API Endpoints:`);
-        console.log(`  POST /api/chat    - AI Chat with Gemini`);
-        console.log(`  GET  /api/health  - Health check`);
+        console.log(`  POST /api/chat         - AI Chat`);
+        console.log(`  GET  /api/health       - Health check`);
+        console.log(`  GET  /api/test-gemini  - Test Gemini connection`);
     });
 }
 
