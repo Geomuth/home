@@ -1,49 +1,28 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const path = require('path');
-require('dotenv').config();
 
 const app = express();
 
-// Middleware
 app.use(cors());
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json());
 
-// Serve static files with proper headers
-app.use(express.static('./', {
-    setHeaders: (res, path) => {
-        if (path.endsWith('.css')) {
-            res.setHeader('Content-Type', 'text/css');
-        } else if (path.endsWith('.js')) {
-            res.setHeader('Content-Type', 'application/javascript');
-        } else if (path.endsWith('.html')) {
-            res.setHeader('Content-Type', 'text/html');
-        }
-    }
-}));
+// Serve static files from the root
+// On Vercel, it's actually better to let Vercel handle this via vercel.json
+app.use(express.static(path.join(__dirname, './')));
 
-// Serve index.html for all non-API routes
-app.get('/', (req, res) => {
+// Your API Route (matches your earlier chat logic)
+app.post('/api/chat', require('./chat.js')); 
+
+// Catch-all to serve index.html for any frontend route
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ===================== LOCAL DEVELOPMENT ONLY =====================
-
-const PORT = process.env.PORT || 3000;
-
-if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`
-╔════════════════════════════════════════╗
-║     🚀 TechGeo Server Started 🚀      ║
-║   http://localhost:${PORT}          ║
-╚════════════════════════════════════════╝
-    `);
-        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`OpenAI Configured: ${process.env.OPENAI_API_KEY ? '✓' : '✗'}`);
-    });
+// IMPORTANT: Export for Vercel, only listen locally
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = 3000;
+    app.listen(PORT, () => console.log(`Local dev on http://localhost:${PORT}`));
 }
 
 module.exports = app;
