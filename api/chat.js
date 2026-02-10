@@ -1,6 +1,7 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
+    // CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -23,35 +24,30 @@ module.exports = async (req, res) => {
 
     if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({
-            error: 'AI service not configured. Please add GEMINI_API_KEY environment variable.',
+            error: 'AI service not configured.',
             response: 'I am currently unavailable. Please check the backend configuration.'
         });
     }
 
     try {
-        // Updated API endpoint - using stable v1 API
+        // CORRECT ENDPOINT - Using the latest stable API
         const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
         
+        console.log('Sending request to Gemini API...');
+        
         const response = await axios.post(GEMINI_API_URL, {
-            contents: [
-                {
-                    role: "user",
-                    parts: [
-                        {
-                            text: `You are TechGeo's expert AI assistant. Provide helpful, concise, and accurate information about technology, programming, web development, cloud computing, cybersecurity, AI/ML, databases, and software engineering.
-                            
-User is asking: "${message}"
+            contents: [{
+                parts: [{
+                    text: `You are TechGeo's expert AI assistant. Provide helpful, concise, and accurate information about technology, programming, web development, cloud computing, cybersecurity, AI/ML, databases, and software engineering.
+                    
+User question: "${message}"
 
-Keep responses clear and actionable. Use examples when helpful. Format your response professionally.`
-                        }
-                    ]
-                }
-            ],
+Keep responses clear, actionable, and professional.`
+                }]
+            }],
             generationConfig: {
                 temperature: 0.7,
                 maxOutputTokens: 1000,
-                topP: 0.8,
-                topK: 40
             },
             safetySettings: [
                 {
@@ -74,11 +70,17 @@ Keep responses clear and actionable. Use examples when helpful. Format your resp
         }, {
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 30000
         });
 
+        console.log('Received response from Gemini API');
+        
+        // Extract the response text
         const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 
-                          'I received an unexpected response format from the AI service.';
+                          'Sorry, I could not generate a response at this time.';
+
+        console.log('AI Response length:', aiResponse.length);
 
         res.status(200).json({
             success: true,
@@ -87,31 +89,67 @@ Keep responses clear and actionable. Use examples when helpful. Format your resp
         });
 
     } catch (error) {
-        console.error('[GEMINI_AI_ERROR]', error.response?.data || error.message);
-
-        let errorMessage = 'I\'m having trouble processing that right now. Please try again.';
+        console.error('[GEMINI_AI_ERROR] Full error:', JSON.stringify(error.response?.data || error.message, null, 2));
+        
+        let errorMessage = 'I\'m having trouble connecting to the AI service. Please try again.';
         let statusCode = 500;
         
         if (error.response) {
+            console.error('Response status:', error.response.status);
+            console.error('Response data:', error.response.data);
+            
             if (error.response.status === 400) {
-                errorMessage = 'Invalid request to AI service.';
+                errorMessage = 'Invalid request. Please check your API configuration.';
                 statusCode = 400;
             } else if (error.response.status === 401 || error.response.status === 403) {
                 errorMessage = 'Authentication error. Please check your API key.';
                 statusCode = 401;
             } else if (error.response.status === 404) {
-                // Model not found error - suggest alternative models
-                errorMessage = 'Service configuration error. Please try using gemini-1.5-flash or gemini-pro model.';
+                // Model not found - try alternative
+                errorMessage = 'Service configuration issue. Trying alternative model...';
                 statusCode = 404;
             } else if (error.response.status === 429) {
-                errorMessage = 'Too many requests. Please wait a moment and try again.';
+                errorMessage = 'Rate limit exceeded. Please wait a moment.';
                 statusCode = 429;
-            } else if (error.response.status === 503) {
-                errorMessage = 'AI service is temporarily unavailable. Please try again later.';
-                statusCode = 503;
             }
+        } else if (error.code === 'ECONNABORTED') {
+            errorMessage = 'Request timeout. The AI service is taking too long to respond.';
         } else if (error.request) {
-            errorMessage = 'No response received from AI service. Please check your internet connection.';
+            errorMessage = 'No response from AI service. Please check your internet connection.';
+        }
+
+        // If 404 error, try the legacy model as fallback
+        if (statusCode === 404) {
+            try {
+                console.log('Trying legacy model as fallback...');
+                const fallbackResponse = await axios.post(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+                    {
+                        contents: [{
+                            parts: [{ text: message }]
+                        }]
+                    },
+                    {
+                        headers: { 'Content-Type': 'application/json' },
+                        timeout: 15000
+                    }
+                );
+                
+                const fallbackText = fallbackResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text || 
+                                    'I received a response but could not process it.';
+                
+                console.log('Fallback model succeeded');
+                
+                return res.status(200).json({
+                    success: true,
+                    response: fallbackText,
+                    timestamp: new Date(),
+                    note: 'Using legacy model'
+                });
+                
+            } catch (fallbackError) {
+                console.error('Fallback also failed:', fallbackError.message);
+            }
         }
 
         res.status(statusCode).json({
