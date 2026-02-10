@@ -9,7 +9,7 @@ module.exports = async (req, res) => {
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
-    } 
+    }
  
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -29,16 +29,18 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        // Updated API endpoint - using stable v1 API
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
         
         const response = await axios.post(GEMINI_API_URL, {
             contents: [
                 {
+                    role: "user",
                     parts: [
                         {
                             text: `You are TechGeo's expert AI assistant. Provide helpful, concise, and accurate information about technology, programming, web development, cloud computing, cybersecurity, AI/ML, databases, and software engineering.
                             
-Context: User is asking: "${message}"
+User is asking: "${message}"
 
 Keep responses clear and actionable. Use examples when helpful. Format your response professionally.`
                         }
@@ -97,6 +99,10 @@ Keep responses clear and actionable. Use examples when helpful. Format your resp
             } else if (error.response.status === 401 || error.response.status === 403) {
                 errorMessage = 'Authentication error. Please check your API key.';
                 statusCode = 401;
+            } else if (error.response.status === 404) {
+                // Model not found error - suggest alternative models
+                errorMessage = 'Service configuration error. Please try using gemini-1.5-flash or gemini-pro model.';
+                statusCode = 404;
             } else if (error.response.status === 429) {
                 errorMessage = 'Too many requests. Please wait a moment and try again.';
                 statusCode = 429;
