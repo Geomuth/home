@@ -14,6 +14,7 @@ app.use(express.static('./'));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
+app.get('/api/models', require('./api/models'));
 
 // API Routes
 app.post('/api/chat', require('./api/chat'));
