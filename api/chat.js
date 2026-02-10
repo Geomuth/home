@@ -1,15 +1,14 @@
-const { OpenAI } = require('openai');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize Gemini with your Google API Key
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 module.exports = async (req, res) => {
-    // Enable CORS for Vercel
+    // Standard CORS headers for Vercel
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -21,22 +20,37 @@ module.exports = async (req, res) => {
 
     const { message } = req.body;
 
-    if (!process.env.OPENAI_API_KEY) {
-        return res.status(500).json({ error: 'OpenAI API Key is missing in Vercel settings.' });
+    if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'Gemini API Key missing in Vercel settings.' });
     }
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: 'You are TechGeo AI assistant. Be helpful and concise.' },
-                { role: 'user', content: message }
-            ],
+        // Use Gemini 1.5 Flash (Fast and Free Tier available)
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash",
+            systemInstruction: "You are TechGeo's expert AI assistant. Provide helpful, concise information about technology and programming."
         });
 
-        res.status(200).json({ response: completion.choices[0].message.content });
+        const result = await model.generateContent(message);
+        const response = await result.response;
+        const text = response.text();
+
+        res.status(200).json({
+            success: true,
+            response: text,
+            timestamp: new Date()
+        });
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'AI failed to respond.' });
+        console.error('[GEMINI_ERROR]', error);
+        res.status(500).json({
+            success: false,
+            response: "I'm having trouble connecting to my brain. Try again in a second!",
+            error: error.message
+        });
     }
 };
