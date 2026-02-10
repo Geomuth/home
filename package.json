@@ -13,7 +13,7 @@
     "tech",
     "blog",
     "chatbot"
-  ],
+  ], 
   "author": "TechGeo",
   "license": "MIT",
   "dependencies": {
