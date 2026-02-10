@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeChatbot();
     initializeMessageIcon();
 }); 
-
+ 
 function initializeMessageIcon() {
     const messageIcon = document.getElementById('message');
     const chatModal = document.getElementById('ai-chat');
