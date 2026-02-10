@@ -1,13 +1,9 @@
 // ===================== INITIALIZATION =====================
 
-let blogs = []; // Global blogs array
-
 // Navigation
 document.addEventListener('DOMContentLoaded', function() {
     initializeNavigation();
     initializeChatbot();
-    initializeSearch();
-    setupScrollSpy();
     initializeMessageIcon();
 }); 
 
@@ -54,85 +50,11 @@ function initializeNavigation() {
         });
     }
 
-    // Close menu when a link is clicked
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', () => {
             navLinks.classList.remove('active');
         });
     });
-}
-
-function setupScrollSpy() {
-    const navLinks = document.querySelectorAll('.nav-link');
-    
-    window.addEventListener('scroll', () => {
-        let current = '';
-        const sections = document.querySelectorAll('section');
-
-        sections.forEach(section => {
-            const sectionTop = section.offsetTop;
-            const sectionHeight = section.clientHeight;
-            if (window.scrollY >= sectionTop - 200) {
-                current = section.getAttribute('id');
-            }
-        });
-
-        navLinks.forEach(link => {
-            link.classList.remove('active');
-            if (link.getAttribute('href').slice(1) === current) {
-                link.classList.add('active');
-            }
-        });
-    });
-}
-
-// Load Blogs
-async function loadBlogs() {
-    // Blogs loading removed - user will add their own HTML/CSS
-}
-
-// Search Functionality
-function initializeSearch() {
-    const searchInput = document.getElementById('searchInput');
-    const searchBtn = document.getElementById('searchBtn');
-    const searchResults = document.getElementById('searchResults');
-
-    searchBtn.addEventListener('click', performSearch);
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') performSearch();
-    });
-
-    function performSearch() {
-        const query = searchInput.value.toLowerCase().trim();
-        searchResults.innerHTML = '';
-
-        if (!query) {
-            searchResults.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #9ca3af;">Enter a search term</p>';
-            return;
-        }
-
-        const results = blogs.filter(blog =>
-            blog.title.toLowerCase().includes(query) ||
-            blog.excerpt.toLowerCase().includes(query) ||
-            blog.category.toLowerCase().includes(query)
-        );
-
-        if (results.length === 0) {
-            searchResults.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #9ca3af;">No results found. Try different keywords!</p>';
-            return;
-        }
-
-        results.forEach(result => {
-            const resultItem = document.createElement('div');
-            resultItem.className = 'search-result-item';
-            resultItem.innerHTML = `
-                <h3>${result.title}</h3>
-                <p>${result.excerpt}</p>
-                <small><strong>Category:</strong> ${result.category} | <strong>Date:</strong> ${result.date}</small>
-            `;
-            searchResults.appendChild(resultItem);
-        });
-    }
 }
 
 // ===================== CHATBOT =====================
