@@ -29,6 +29,20 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// API Routes
+app.post('/api/chat', require('./api/chat'));
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date(),
+        service: 'TechGeo API',
+        aiProvider: 'Google Gemini',
+        aiConfigured: !!process.env.GEMINI_API_KEY
+    });
+});
+
 // ===================== LOCAL DEVELOPMENT ONLY =====================
 
 const PORT = process.env.PORT || 3000;
@@ -38,11 +52,14 @@ if (require.main === module) {
         console.log(`
 ╔════════════════════════════════════════╗
 ║     🚀 TechGeo Server Started 🚀      ║
-║   http://localhost:${PORT}          ║
+║   http://localhost:${PORT}            ║
 ╚════════════════════════════════════════╝
     `);
         console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`OpenAI Configured: ${process.env.OPENAI_API_KEY ? '✓' : '✗'}`);
+        console.log(`Gemini AI Configured: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
+        console.log(`API Endpoints:`);
+        console.log(`  POST /api/chat    - AI Chat with Gemini`);
+        console.log(`  GET  /api/health  - Health check`);
     });
 }
 
