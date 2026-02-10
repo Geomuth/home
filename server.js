@@ -10,7 +10,7 @@ const app = express();
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
-
+ 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
