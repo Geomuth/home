@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
             error: 'API key not configured'
         });
     }
-
+ 
     try {
         const response = await axios.get(
             `https://generativelanguage.googleapis.com/v1/models?key=${process.env.GEMINI_API_KEY}`
