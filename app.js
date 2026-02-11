@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeNavigation();
     initializeChatbot();
     initializeMessageIcon();
-}); 
+});
  
 function initializeMessageIcon() {
     const messageIcon = document.getElementById('message');
