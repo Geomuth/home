@@ -16,8 +16,8 @@ app.get('/', (req, res) => {
 });
 
 // API Routes (Fixed: Require from root, not /api folder)
-app.get('/api/models', require('./models'));
-app.post('/api/chat', require('./chat'));
+app.get('/api/models', require('./api/models'));
+app.post('/api/chat', require('./api/chat'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
