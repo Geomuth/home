@@ -9,8 +9,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from ROOT – must be first
-app.use('/', express.static(path.join(__dirname, '.'), {
+// Serve static files from root - must be FIRST
+app.use(express.static(path.join(__dirname, '.'), {
   index: false,
   extensions: ['html', 'css', 'js']
 }));
@@ -20,7 +20,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// API routes (your api folder)
+// API routes
 app.get('/api/models', require('./api/models'));
 app.post('/api/chat', require('./api/chat'));
 
@@ -36,7 +36,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Test Gemini connection
+// Test Gemini
 app.get('/api/test-gemini', async (req, res) => {
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not set' });
@@ -44,9 +44,9 @@ app.get('/api/test-gemini', async (req, res) => {
 
   try {
     const axios = require('axios');
-    const testUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-    const response = await axios.post(testUrl, {
+    const response = await axios.post(url, {
       contents: [{ parts: [{ text: "Hello" }] }]
     }, {
       headers: { 'Content-Type': 'application/json' },
@@ -55,28 +55,30 @@ app.get('/api/test-gemini', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Gemini API reachable',
-      model: 'gemini-1.5-flash',
+      message: 'Gemini reachable',
       responseSnippet: response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No text'
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Gemini test failed',
       error: error.response?.data?.error?.message || error.message
     });
   }
 });
 
-// SPA fallback – only send index.html for non-file, non-api paths
+// Catch-all - only for SPA, skip files and api
 app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/') || /\.[a-z0-9]+$/i.test(req.path)) {
+  const isFile = /\.[a-z0-9]+$/i.test(req.path);
+  const isApi  = req.path.startsWith('/api/');
+
+  if (isFile || isApi) {
     return res.status(404).send('Not found');
   }
+
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start server (local)
+// Start server (local only)
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => {
