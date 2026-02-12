@@ -8,14 +8,19 @@ const app = express();
 // Middleware 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '.')));  // Fixed: Use absolute path for static files
+
+// Serve static files FIRST (this fixes MIME type issues)
+app.use(express.static(path.join(__dirname, '.'), {
+  index: false,                    // prevent auto-serving index.html for directories
+  extensions: ['html', 'css', 'js'] // explicitly recognize these file types
+}));
 
 // Serve index.html for root
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// API Routes (Fixed: Require from root, not /api folder)
+// API Routes
 app.get('/api/models', require('./api/models'));
 app.post('/api/chat', require('./api/chat'));
 
@@ -31,7 +36,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Test endpoint to verify API connectivity (unchanged, but useful for debugging)
+// Test endpoint to verify API connectivity
 app.get('/api/test-gemini', async (req, res) => {
     if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: 'GEMINI_API_KEY not set' });
@@ -66,14 +71,22 @@ app.get('/api/test-gemini', async (req, res) => {
     }
 });
 
-// Handle 404 for API routes
-app.use('/api/*', (req, res) => {
-    res.status(404).json({ error: 'API endpoint not found' });
+// Catch-all for SPA/client-side routing – ONLY if not a file request
+app.get('*', (req, res, next) => {
+    // If the path has a file extension → skip (let static or 404 handle)
+    if (/\.\w+$/.test(req.path)) {
+        return next();
+    }
+    
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Handle all other routes (SPA fallback)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// 404 handler
+app.use((req, res) => {
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.status(404).send('Not found');
 });
 
 // ===================== START SERVER =====================
