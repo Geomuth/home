@@ -8,16 +8,16 @@ const app = express();
 // Middleware 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('./'));
+app.use(express.static(path.join(__dirname, '.')));  // Fixed: Use absolute path for static files
 
-// Serve index.html for all non-API routes
+// Serve index.html for root
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-app.get('/api/models', require('./api/models'));
 
-// API Routes
-app.post('/api/chat', require('./api/chat'));
+// API Routes (Fixed: Require from root, not /api folder)
+app.get('/api/models', require('./models'));
+app.post('/api/chat', require('./chat'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -31,14 +31,13 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Test endpoint to verify API connectivity
+// Test endpoint to verify API connectivity (unchanged, but useful for debugging)
 app.get('/api/test-gemini', async (req, res) => {
     if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: 'GEMINI_API_KEY not set' });
     }
     
     try {
-        // Simple test request
         const testUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
         const axios = require('axios');
         
@@ -72,7 +71,7 @@ app.use('/api/*', (req, res) => {
     res.status(404).json({ error: 'API endpoint not found' });
 });
 
-// Handle all other routes
+// Handle all other routes (SPA fallback)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -93,6 +92,7 @@ if (require.main === module) {
         console.log(`Gemini AI Configured: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
         console.log(`API Endpoints:`);
         console.log(`  POST /api/chat         - AI Chat`);
+        console.log(`  GET  /api/models       - List models`);
         console.log(`  GET  /api/health       - Health check`);
         console.log(`  GET  /api/test-gemini  - Test Gemini connection`);
     });
