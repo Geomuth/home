@@ -5,26 +5,26 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
+// Middleware 
 app.use(cors());
 app.use(express.json());
 
-// Serve ALL static files FIRST from root (css, js, html, etc.)
-app.use(express.static(path.join(__dirname, '.'), {
-  index: false,  // Don't auto-serve index.html for folders
-  extensions: ['html', 'css', 'js', 'png', 'jpg', 'ico']  // Add more if you have images/etc.
+// Serve static files from ROOT – make this the very first thing
+app.use('/', express.static(path.join(__dirname, '.'), {
+  index: false,
+  extensions: ['html', 'css', 'js']
 }));
 
-// Explicit root route
+// Explicitly serve index.html at root
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// API Routes
+// API Routes (your api folder)
 app.get('/api/models', require('./api/models'));
 app.post('/api/chat', require('./api/chat'));
 
-// Health check
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -36,7 +36,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Gemini test endpoint
+// Test endpoint
 app.get('/api/test-gemini', async (req, res) => {
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not set' });
@@ -69,22 +69,16 @@ app.get('/api/test-gemini', async (req, res) => {
   }
 });
 
-// Catch-all for SPA – ONLY if NOT a file request (this prevents serving HTML for .js/.css)
-app.get('*', (req, res, next) => {
-  // Skip if path has file extension → let static middleware or 404 handle it
-  if (/\.[a-zA-Z0-9]+$/.test(req.path)) {
-    return next();
+// Catch-all SPA fallback – skip if it looks like a static file request
+app.get('*', (req, res) => {
+  const isFileRequest = /\.[a-zA-Z0-9]+$/.test(req.path);
+  const isApiRequest = req.path.startsWith('/api/');
+  
+  if (isFileRequest || isApiRequest) {
+    return res.status(404).send('Not found');
   }
   
   res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Final 404 fallback
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
-  }
-  res.status(404).send('Not found');
 });
 
 // Start server
@@ -92,19 +86,8 @@ const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`
-╔════════════════════════════════════════╗
-║     🚀 TechGeo Server Started 🚀      ║
-║   http://localhost:${PORT}            ║
-╚════════════════════════════════════════╝
-    `);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Gemini AI Configured: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
-    console.log(`API Endpoints:`);
-    console.log(`  POST /api/chat         - AI Chat`);
-    console.log(`  GET  /api/models       - List models`);
-    console.log(`  GET  /api/health       - Health check`);
-    console.log(`  GET  /api/test-gemini  - Test Gemini connection`);
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Gemini configured: ${!!process.env.GEMINI_API_KEY ? 'Yes' : 'No'}`);
   });
 }
 
