@@ -6,30 +6,22 @@ module.exports = async (req, res) => {
     }
 
     if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({
-            error: 'API key not configured'
-        });
+        return res.status(500).json({ error: 'API key not configured' });
     }
- 
+
     try {
         const response = await axios.get(
             `https://generativelanguage.googleapis.com/v1/models?key=${process.env.GEMINI_API_KEY}`
         );
 
-        res.status(200).json({
+        res.json({
             success: true,
-            models: response.data.models,
-            availableForChat: response.data.models.filter(model => 
-                model.supportedGenerationMethods && 
-                model.supportedGenerationMethods.includes('generateContent')
-            )
+            models: response.data.models
         });
     } catch (error) {
-        console.error('Models error:', error.response?.data || error.message);
         res.status(500).json({
-            success: false,
             error: 'Failed to fetch models',
-            details: error.response?.data || error.message
+            details: error.message
         });
     }
 };
