@@ -8,6 +8,27 @@
   ],
   "routes": [
     {
+      "src": "/app.js",
+      "dest": "/app.js",
+      "headers": {
+        "Content-Type": "application/javascript; charset=utf-8"
+      }
+    },
+    {
+      "src": "/chat.js",
+      "dest": "/chat.js",
+      "headers": {
+        "Content-Type": "application/javascript; charset=utf-8"
+      }
+    },
+    {
+      "src": "/style.css",
+      "dest": "/style.css",
+      "headers": {
+        "Content-Type": "text/css; charset=utf-8"
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "server.js"
     }
