@@ -43,6 +43,23 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '.')));
 
+// Explicitly serve CSS with proper headers
+app.get('/style.css', (req, res) => {
+  res.type('text/css');
+  res.sendFile(path.join(__dirname, 'style.css'));
+});
+
+// Explicitly serve JS files
+app.get('/app.js', (req, res) => {
+  res.type('application/javascript');
+  res.sendFile(path.join(__dirname, 'app.js'));
+});
+
+app.get('/chat.js', (req, res) => {
+  res.type('application/javascript');
+  res.sendFile(path.join(__dirname, 'chat.js'));
+});
+
 // Root
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
