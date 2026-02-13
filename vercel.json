@@ -8,34 +8,6 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "server.js"
-    },
-    {
-      "src": "/style.css",
-      "dest": "/style.css",
-      "headers": {
-        "Cache-Control": "public, max-age=3600",
-        "Content-Type": "text/css; charset=utf-8"
-      }
-    },
-    {
-      "src": "/app.js",
-      "dest": "/app.js",
-      "headers": {
-        "Cache-Control": "public, max-age=3600",
-        "Content-Type": "application/javascript; charset=utf-8"
-      }
-    },
-    {
-      "src": "/chat.js",
-      "dest": "/chat.js",
-      "headers": {
-        "Cache-Control": "public, max-age=3600",
-        "Content-Type": "application/javascript; charset=utf-8"
-      }
-    },
-    {
       "src": "/(.*)",
       "dest": "server.js"
     }
