@@ -1,90 +1,100 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
+const fs = require('fs');
+const chatResponses = require('./chat.js');
 
 const app = express();
+const QUESTIONS_FILE = path.join(__dirname, 'questions.json');
 
-// Middleware
+// Load or initialize questions
+function loadQuestions() {
+  try {
+    if (fs.existsSync(QUESTIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(QUESTIONS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error loading questions:', err.message);
+  }
+  return [];
+}
+
+function saveQuestions(questions) {
+  try {
+    fs.writeFileSync(QUESTIONS_FILE, JSON.stringify(questions, null, 2));
+  } catch (err) {
+    console.error('Error saving questions:', err.message);
+  }
+}
+
+function addUnmatchedQuestion(question) {
+  const questions = loadQuestions();
+  // Only add if not already logged
+  if (!questions.some(q => q.question.toLowerCase() === question.toLowerCase())) {
+    questions.push({
+      question: question,
+      timestamp: new Date().toLocaleString()
+    });
+    saveQuestions(questions);
+  }
+}
+
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '.')));
 
-// Serve static files from root - must be FIRST
-app.use(express.static(path.join(__dirname, '.'), {
-  index: false,
-  extensions: ['html', 'css', 'js']
-}));
-
-// Root page
+// Root
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// API routes
-app.get('/api/models', require('./api/models'));
-app.post('/api/chat', require('./api/chat'));
+// Match keywords to response
+app.post('/api/chat', (req, res) => {
+  const { message } = req.body;
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date(),
-    service: 'TechGeo AI Assistant',
-    aiProvider: 'Google Gemini',
-    aiConfigured: !!process.env.GEMINI_API_KEY,
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// Test Gemini
-app.get('/api/test-gemini', async (req, res) => {
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not set' });
+  if (!message?.trim()) {
+    return res.status(400).json({ error: 'Message is required' });
   }
 
-  try {
-    const axios = require('axios');
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const input = message.toLowerCase().trim();
+  let reply = null;
 
-    const response = await axios.post(url, {
-      contents: [{ parts: [{ text: "Hello" }] }]
-    }, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 10000
-    });
-
-    res.json({
-      success: true,
-      message: 'Gemini reachable',
-      responseSnippet: response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No text'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data?.error?.message || error.message
-    });
+  // Perfect match first
+  for (const [keywords, response] of Object.entries(chatResponses)) {
+    const keywordList = keywords.split('|').map(k => k.toLowerCase().trim());
+    if (keywordList.includes(input)) {
+      reply = response;
+      break;
+    }
   }
+
+  // If no perfect match, try keyword contains (near match)
+  if (!reply) {
+    for (const [keywords, response] of Object.entries(chatResponses)) {
+      const keywordList = keywords.split('|').map(k => k.toLowerCase().trim());
+      if (keywordList.some(k => input.includes(k) || k.split(' ').some(word => input.includes(word)))) {
+        reply = response;
+        break;
+      }
+    }
+  }
+
+  if (!reply) {
+    // Log unmatched question for training
+    addUnmatchedQuestion(message);
+    reply = 'I don\'t understand that yet. Your question has been saved for training.';
+  }
+
+  res.json({ response: reply });
 });
 
-// Catch-all - only for SPA, skip files and api
+// Catch-all
 app.get('*', (req, res) => {
-  const isFile = /\.[a-z0-9]+$/i.test(req.path);
-  const isApi  = req.path.startsWith('/api/');
-
-  if (isFile || isApi) {
-    return res.status(404).send('Not found');
-  }
-
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start server (local only)
 const PORT = process.env.PORT || 3000;
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running → http://localhost:${PORT}`);
-    console.log(`Gemini key: ${process.env.GEMINI_API_KEY ? 'present' : 'missing'}`);
-  });
-}
-
-module.exports = app;
+app.listen(PORT, () => {
+  console.log(`Server running → http://localhost:${PORT}`);
+  console.log('Chat responses loaded from chat.js');
+});
