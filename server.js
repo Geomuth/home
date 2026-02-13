@@ -91,8 +91,13 @@ app.post('/api/chat', (req, res) => {
   res.json({ response: reply });
 });
 
-// Catch-all
+// Catch-all for SPA - serve index.html for all other routes
 app.get('*', (req, res) => {
+  // Don't serve index.html for API routes or file requests
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.type('text/html');
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
