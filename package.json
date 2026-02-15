@@ -4,19 +4,19 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5"
-  },
-  "scripts": {
-    "start": "node server.js",
+    "dev": "nodemon server.js",
     "vercel-build": "echo 'No build needed'"
   },
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
-    "mongoose": "^8.0.0"
+    "mongoose": "^8.0.0",
+    "express-rate-limit": "^7.1.5",
+    "bad-words": "^3.0.4",
+    "franc": "^6.1.0",
+    "langs": "^2.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
