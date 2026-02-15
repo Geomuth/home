@@ -5,18 +5,26 @@ const mongoose = require('mongoose');
 const chatResponses = require('./chat.js');
 const rateLimit = require('express-rate-limit');
 const Filter = require('bad-words');
-const franc = require('franc');
-const langs = require('langs');
+
+// Dynamic import for franc (ES Module)
+let franc;
+let langs;
+
+// Load ES modules dynamically
+(async () => {
+  franc = await import('franc');
+  langs = await import('langs');
+})();
 
 const app = express();
 const filter = new Filter();
 
 // ============================================
-// FEATURE 1: RATE LIMITING (Prevent spam/abuse)
+// FEATURE 1: RATE LIMITING
 // ============================================
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100,
   message: { 
     error: 'Too many requests, please try again later',
     response: null 
@@ -25,7 +33,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply rate limiting to all API routes
 app.use('/api/', limiter);
 
 // ============================================
@@ -33,16 +40,14 @@ app.use('/api/', limiter);
 // ============================================
 const MONGODB_URI = process.env.techgeo_MONGODB_URI;
 
-// Validate environment variable
 if (!MONGODB_URI) {
   console.error('❌ Missing techgeo_MONGODB_URI environment variable');
   process.exit(1);
 }
 
-// Connect with retry logic
 const connectWithRetry = () => {
   mongoose.connect(MONGODB_URI)
-    .then(() => console.log('✅ Connected to MongoDB Atlas via Vercel Env'))
+    .then(() => console.log('✅ Connected to MongoDB Atlas'))
     .catch(err => {
       console.error('❌ MongoDB Connection Error:', err);
       console.log('🔄 Retrying in 5 seconds...');
@@ -58,7 +63,7 @@ const questionSchema = new mongoose.Schema({
   timestamp: { type: String, default: () => new Date().toLocaleString() },
   askedCount: { type: Number, default: 1 },
   lastAsked: { type: String, default: () => new Date().toLocaleString() },
-  language: { type: String, default: 'unknown' } // For feature 9
+  language: { type: String, default: 'unknown' }
 });
 
 const Question = mongoose.model('Question', questionSchema);
@@ -68,7 +73,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '.')));
 
 // ============================================
-// Preprocess responses for faster matching
+// Preprocess responses
 // ============================================
 const processedResponses = (() => {
   const responses = [];
@@ -87,18 +92,13 @@ const processedResponses = (() => {
 // Helper Functions
 // ============================================
 
-// Calculate similarity score for typos and variations
 function calculateSimilarity(str1, str2) {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
   
-  // Exact match
   if (s1 === s2) return 100;
-  
-  // Contains match
   if (s1.includes(s2) || s2.includes(s1)) return 80;
   
-  // Word overlap
   const words1 = new Set(s1.split(/\s+/));
   const words2 = new Set(s2.split(/\s+/));
   const intersection = new Set([...words1].filter(x => words2.has(x)));
@@ -110,18 +110,37 @@ function calculateSimilarity(str1, str2) {
 }
 
 // ============================================
-// FEATURE 9: LANGUAGE DETECTION
+// FEATURE 9: LANGUAGE DETECTION (Swahili + English)
 // ============================================
-function detectLanguage(input) {
+async function detectLanguage(input) {
   try {
-    const detectedLang = franc(input);
+    // Wait for franc to be loaded if not already
+    if (!franc) {
+      franc = await import('franc');
+      langs = await import('langs');
+    }
     
-    if (detectedLang === 'und') {
-      return { code: 'eng', name: 'English' }; // Default to English
+    const detectedLang = franc.franc(input);
+    
+    // Check for Swahili specific keywords (fallback detection)
+    const swahiliKeywords = ['habari', 'sasa', 'mambo', 'vipi', 'tafadhali', 'asante', 
+                             'sawa', 'ndio', 'hapana', 'sijui', 'naomba', 'msaada',
+                             'bei', 'gharama', 'wapi', 'nani', 'lini', 'kwa nini'];
+    
+    const inputLower = input.toLowerCase();
+    const hasSwahili = swahiliKeywords.some(keyword => inputLower.includes(keyword));
+    
+    // Override if Swahili detected
+    if (hasSwahili || detectedLang === 'swa') {
+      return { code: 'swa', name: 'Swahili' };
+    }
+    
+    if (detectedLang === 'und' || detectedLang === 'eng') {
+      return { code: 'eng', name: 'English' };
     }
     
     try {
-      const language = langs.where('3', detectedLang);
+      const language = langs.default.where('3', detectedLang);
       return {
         code: language['1'],
         name: language['name']
@@ -136,10 +155,27 @@ function detectLanguage(input) {
 }
 
 // ============================================
-// FEATURE 3: PROFANITY FILTER
+// FEATURE 3: PROFANITY FILTER (with Swahili support)
 // ============================================
 function checkProfanity(input) {
-  return filter.isProfane(input);
+  // Add Swahili profanity words to filter
+  const swahiliProfanity = ['kuma', 'mbwa', 'pumbafu', 'mjinga', 'fala']; // Add more as needed
+  
+  const inputLower = input.toLowerCase();
+  
+  // Check English profanity
+  if (filter.isProfane(input)) {
+    return true;
+  }
+  
+  // Check Swahili profanity
+  for (const word of swahiliProfanity) {
+    if (inputLower.includes(word)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 // ============================================
@@ -153,7 +189,7 @@ function findBestMatch(input) {
   let highestScore = 0;
   let matchType = 'none';
   
-  // PHASE 1: Exact match (priority)
+  // PHASE 1: Exact match
   for (const response of processedResponses) {
     for (const keyword of response.keywords) {
       if (normalizedInput === keyword) {
@@ -190,16 +226,13 @@ function findBestMatch(input) {
         
         for (const kw of keywordWords) {
           for (const word of inputWords) {
-            // Direct word match
             if (word === kw) {
               wordMatchCount += 2;
             }
-            // Partial word match (for typos or variations)
             else if (word.length > 3 && kw.length > 3) {
               if (word.includes(kw) || kw.includes(word)) {
                 wordMatchCount += 1;
               }
-              // Check similarity for typos
               const similarity = calculateSimilarity(word, kw);
               if (similarity > 70) {
                 wordMatchCount += 1.5;
@@ -217,7 +250,7 @@ function findBestMatch(input) {
     }
   }
   
-  // PHASE 4: Similarity check for difficult matches
+  // PHASE 4: Similarity check
   if (!bestMatch || highestScore < 5) {
     for (const response of processedResponses) {
       for (const keyword of response.keywords) {
@@ -236,7 +269,7 @@ function findBestMatch(input) {
   if (bestMatch && highestScore > 10) {
     return {
       response: bestMatch,
-      score: Math.round(highestScore), // Round for cleaner output
+      score: Math.round(highestScore),
       type: matchType
     };
   }
@@ -249,26 +282,22 @@ async function addUnmatchedQuestion(questionText, language = 'unknown') {
   try {
     const normalizedQuestion = questionText.toLowerCase().trim();
     
-    // Check if question already exists
     const existingQuestion = await Question.findOne({
       question: { $regex: new RegExp('^' + normalizedQuestion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }
     });
     
     if (existingQuestion) {
-      // Update count and timestamp
       existingQuestion.askedCount += 1;
       existingQuestion.lastAsked = new Date().toLocaleString();
       await existingQuestion.save();
       console.log(`📊 Updated count for: "${questionText}" (asked ${existingQuestion.askedCount} times)`);
       
-      // Alert if question asked many times
       if (existingQuestion.askedCount === 5) {
         console.log('🔔 POPULAR QUESTION ALERT: Consider adding to chat.js!');
       }
       
       return { saved: true, isNew: false, count: existingQuestion.askedCount };
     } else {
-      // Save new question with language
       const newQuestion = new Question({
         question: questionText,
         language: language,
@@ -283,6 +312,34 @@ async function addUnmatchedQuestion(questionText, language = 'unknown') {
     console.error('Database save error:', err);
     return { saved: false };
   }
+}
+
+// ============================================
+// Swahili Responses for Common Questions
+// ============================================
+const swahiliResponses = {
+  default: "Samahani, sikuelewa vizuri. Timu yetu inafanyia kazi swali lako. Unaweza kutupigia +254757579531 au kututumia barua pepe techgeof@gmail.com kwa majibu ya haraka.",
+  location: "Tupo Mombasa, Kenya. Karibu!",
+  greeting: "Habari! Karibu TechGeo!",
+  company: "TechGeo ni kampuni ya teknolojia inayotoa suluhisho za kidijitali.",
+  contact: "Wasiliana nasi: info@techgeo.com au piga +254-xxx-xxx",
+  services: "Tunatoa huduma za: ukuzaji wa tovuti, programu za simu, na suluhisho za wingu.",
+  pricing: "Wasiliana na timu yetu ya mauzo kwa bei na gharama.",
+  hours: "Tunafanya kazi Jumatatu-Ijumaa 9AM-6PM EAT",
+  team: "Timu yetu ina wataalamu wenye ujuzi wa teknolojia.",
+  portfolio: "Angalia kazi zetu kwenye techgeo.com/portfolio",
+  support: "Tukusaidie vipi leo?",
+  acknowledgement: "Asante kwa swali lako! Una swali lingine? Karibu tuwasiliane."
+};
+
+// ============================================
+// Get response in appropriate language
+// ============================================
+function getLocalizedResponse(intent, language) {
+  if (language === 'swa') {
+    return swahiliResponses[intent] || swahiliResponses.default;
+  }
+  return null; // Will use default from chat.js
 }
 
 // ============================================
@@ -320,24 +377,30 @@ app.post('/api/chat', async (req, res) => {
   const input = message.trim();
   
   if (input.length === 0) {
+    const lang = await detectLanguage(input);
     return res.json({ 
-      response: "Please type a message. I'm here to help!",
+      response: lang.code === 'swa' ? 
+        "Tafadhali andika ujumbe. Niko hapa kusaidia!" : 
+        "Please type a message. I'm here to help!",
       matched: false,
-      confidence: 0
+      confidence: 0,
+      language: lang.name
     });
   }
   
   console.log(`\n📨 Received: "${input}"`);
   
   // ========== FEATURE 9: DETECT LANGUAGE ==========
-  const language = detectLanguage(input);
+  const language = await detectLanguage(input);
   console.log(`🌐 Language detected: ${language.name} (${language.code})`);
   
   // ========== FEATURE 3: CHECK PROFANITY ==========
   if (checkProfanity(input)) {
     console.log('⚠️ Profanity detected');
     return res.json({ 
-      response: "Please keep the conversation respectful. How can I help you professionally?",
+      response: language.code === 'swa' ?
+        "Tafadhali weka heshima katika mazungumzo. Nikusaidie vipi kwa kitaalamu?" :
+        "Please keep the conversation respectful. How can I help you professionally?",
       matched: false,
       confidence: 0,
       language: language.name
@@ -355,27 +418,28 @@ app.post('/api/chat', async (req, res) => {
     matched = true;
     confidence = matchResult.score;
     console.log(`✅ Matched: ${matchResult.type} (confidence: ${confidence}%)`);
+    
+    // Try to determine intent for Swahili response
+    const intent = matchResult.type;
+    const swahiliReply = getLocalizedResponse(intent, language.code);
+    
+    // If Swahili and we have a translation, use it
+    if (language.code === 'swa' && swahiliReply) {
+      reply = swahiliReply;
+    }
   }
   
   // ========== HANDLE UNMATCHED QUESTIONS ==========
   if (!reply) {
     console.log(`❌ No match found for: "${input}"`);
     
-    // Save to MongoDB with language
-    const saveResult = await addUnmatchedQuestion(input, language.code);
+    await addUnmatchedQuestion(input, language.code);
     
-    // Default response based on language
-    if (language.code !== 'eng') {
-      reply = "I currently only support English. Please ask in English. 🇬🇧\n\n" +
-              "Je ne supporte actuellement que l'anglais. Veuillez demander en anglais.\n\n" +
-              "Aktuell unterstütze ich nur Englisch. Bitte frag auf Englisch.";
+    // Provide appropriate response based on language
+    if (language.code === 'swa') {
+      reply = swahiliResponses.default;
     } else {
       reply = "I didn't get you well, our team is working on it. You can reach us on +254757579531 or email us at techgeof@gmail.com for quick instant answers";
-    }
-    
-    // If this question has been asked many times, add a note
-    if (saveResult.saved && !saveResult.isNew && saveResult.count > 3) {
-      console.log(`⚠️ Frequently asked question (#${saveResult.count} times)`);
     }
   }
   
@@ -386,12 +450,12 @@ app.post('/api/chat', async (req, res) => {
     response: reply,
     matched: matched,
     confidence: confidence,
-    language: language.name // Include language in response
+    language: language.name
   });
 });
 
 // ============================================
-// OPTIONAL: Health check endpoint
+// Health check endpoint
 // ============================================
 app.get('/api/health', (req, res) => {
   res.json({
@@ -401,7 +465,7 @@ app.get('/api/health', (req, res) => {
     responsesLoaded: processedResponses.length,
     rateLimiting: 'active',
     profanityFilter: 'active',
-    languageDetection: 'active'
+    languageDetection: 'active (Swahili/English)'
   });
 });
 
@@ -421,8 +485,9 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`📚 Loaded ${processedResponses.length} response patterns`);
   console.log(`💾 MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Connecting...'}`);
-  console.log(`🛡️  Rate Limiting: Active (100 requests/15min)`);
-  console.log(`🚫 Profanity Filter: Active`);
-  console.log(`🌐 Language Detection: Active`);
-  console.log(`📊 Confidence Scores: Active\n`);
+  console.log(`🛡️  Rate Limiting: Active`);
+  console.log(`🚫 Profanity Filter: Active (English + Swahili)`);
+  console.log(`🌐 Language Detection: Active (Swahili/English)`);
+  console.log(`📊 Confidence Scores: Active`);
+  console.log(`🇰🇪 Swahili Support: Enabled with ${Object.keys(swahiliResponses).length} responses\n`);
 });
