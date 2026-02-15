@@ -68,7 +68,7 @@ app.post('/api/chat', async (req, res) => {
   if (!reply) {
     // Save to MongoDB instead of local file
     await addUnmatchedQuestion(message);
-    reply = "I don't understand that yet. Your question has been saved for training.";
+    reply = "I didn't get you well, our team is working on it. you can reach us on +254757579531 or email us at techgeof@gmail.com for quick instant answers";
   }
 
   res.json({ response: reply });
