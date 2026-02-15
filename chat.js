@@ -12,7 +12,8 @@ const chatResponses = {
   'hours|open|closed': 'We are open Monday-Friday 9AM-6PM EAT',
   'team|staff|people': 'Our team consists of experienced tech professionals',
   'project|portfolio|work': 'Check our portfolio at techgeo.com/portfolio',
-  'support|help|issue': 'How can we assist you today?'
+  'support|help|issue': 'How can we assist you today?',
+  'okay|yeah|yes|ok': 'Thanks for being intrested, any other question dont hesitate to reach us'
 };
 
 // Export for use in server
