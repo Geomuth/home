@@ -73,7 +73,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '.')));
 
 // ============================================
-// Preprocess responses
+// Preprocess responses from chat.js
 // ============================================
 const processedResponses = (() => {
   const responses = [];
@@ -87,6 +87,8 @@ const processedResponses = (() => {
   }
   return responses;
 })();
+
+console.log(`📚 Loaded ${processedResponses.length} response patterns from chat.js`);
 
 // ============================================
 // Helper Functions
@@ -110,7 +112,7 @@ function calculateSimilarity(str1, str2) {
 }
 
 // ============================================
-// FEATURE 9: LANGUAGE DETECTION (Swahili + English)
+// FEATURE 9: LANGUAGE DETECTION 
 // ============================================
 async function detectLanguage(input) {
   try {
@@ -122,10 +124,11 @@ async function detectLanguage(input) {
     
     const detectedLang = franc.franc(input);
     
-    // Check for Swahili specific keywords (fallback detection)
+    // Check for Swahili specific keywords
     const swahiliKeywords = ['habari', 'sasa', 'mambo', 'vipi', 'tafadhali', 'asante', 
                              'sawa', 'ndio', 'hapana', 'sijui', 'naomba', 'msaada',
-                             'bei', 'gharama', 'wapi', 'nani', 'lini', 'kwa nini'];
+                             'bei', 'gharama', 'wapi', 'nani', 'lini', 'kwa nini',
+                             'jina', 'umri', 'kazini', 'nyumbani', 'safari'];
     
     const inputLower = input.toLowerCase();
     const hasSwahili = swahiliKeywords.some(keyword => inputLower.includes(keyword));
@@ -139,15 +142,7 @@ async function detectLanguage(input) {
       return { code: 'eng', name: 'English' };
     }
     
-    try {
-      const language = langs.default.where('3', detectedLang);
-      return {
-        code: language['1'],
-        name: language['name']
-      };
-    } catch (e) {
-      return { code: 'eng', name: 'English' };
-    }
+    return { code: 'eng', name: 'English' };
   } catch (error) {
     console.log('Language detection error:', error);
     return { code: 'eng', name: 'English' };
@@ -155,11 +150,11 @@ async function detectLanguage(input) {
 }
 
 // ============================================
-// FEATURE 3: PROFANITY FILTER (with Swahili support)
+// FEATURE 3: PROFANITY FILTER 
 // ============================================
 function checkProfanity(input) {
-  // Add Swahili profanity words to filter
-  const swahiliProfanity = ['kuma', 'mbwa', 'pumbafu', 'mjinga', 'fala']; // Add more as needed
+  // Add Swahili profanity words
+  const swahiliProfanity = ['kuma', 'mbwa', 'pumbafu', 'mjinga', 'fala', 'mboro']; 
   
   const inputLower = input.toLowerCase();
   
@@ -179,7 +174,7 @@ function checkProfanity(input) {
 }
 
 // ============================================
-// Main matching function
+// Main matching function (works with all languages from chat.js)
 // ============================================
 function findBestMatch(input) {
   const normalizedInput = input.toLowerCase().trim();
@@ -188,15 +183,17 @@ function findBestMatch(input) {
   let bestMatch = null;
   let highestScore = 0;
   let matchType = 'none';
+  let matchedKeywords = [];
   
-  // PHASE 1: Exact match
+  // PHASE 1: Exact match (highest priority)
   for (const response of processedResponses) {
     for (const keyword of response.keywords) {
       if (normalizedInput === keyword) {
         return {
           response: response.response,
           score: 100,
-          type: 'exact'
+          type: 'exact',
+          matchedKeyword: keyword
         };
       }
     }
@@ -211,6 +208,7 @@ function findBestMatch(input) {
           highestScore = score;
           bestMatch = response.response;
           matchType = 'contains';
+          matchedKeywords = [keyword];
         }
       }
     }
@@ -220,6 +218,7 @@ function findBestMatch(input) {
   if (!bestMatch) {
     for (const response of processedResponses) {
       let wordMatchCount = 0;
+      const matchedInThisResponse = [];
       
       for (const keyword of response.keywords) {
         const keywordWords = keyword.split(/\s+/);
@@ -228,14 +227,17 @@ function findBestMatch(input) {
           for (const word of inputWords) {
             if (word === kw) {
               wordMatchCount += 2;
+              matchedInThisResponse.push(kw);
             }
             else if (word.length > 3 && kw.length > 3) {
               if (word.includes(kw) || kw.includes(word)) {
                 wordMatchCount += 1;
+                matchedInThisResponse.push(kw + '(partial)');
               }
               const similarity = calculateSimilarity(word, kw);
               if (similarity > 70) {
                 wordMatchCount += 1.5;
+                matchedInThisResponse.push(kw + '(similar)');
               }
             }
           }
@@ -246,11 +248,12 @@ function findBestMatch(input) {
         highestScore = wordMatchCount;
         bestMatch = response.response;
         matchType = 'word';
+        matchedKeywords = [...new Set(matchedInThisResponse)];
       }
     }
   }
   
-  // PHASE 4: Similarity check
+  // PHASE 4: Similarity check for difficult matches
   if (!bestMatch || highestScore < 5) {
     for (const response of processedResponses) {
       for (const keyword of response.keywords) {
@@ -260,6 +263,7 @@ function findBestMatch(input) {
             highestScore = similarity;
             bestMatch = response.response;
             matchType = 'similar';
+            matchedKeywords = [keyword];
           }
         }
       }
@@ -270,7 +274,8 @@ function findBestMatch(input) {
     return {
       response: bestMatch,
       score: Math.round(highestScore),
-      type: matchType
+      type: matchType,
+      matchedKeywords: matchedKeywords
     };
   }
   
@@ -315,34 +320,6 @@ async function addUnmatchedQuestion(questionText, language = 'unknown') {
 }
 
 // ============================================
-// Swahili Responses for Common Questions
-// ============================================
-const swahiliResponses = {
-  default: "Samahani, sikuelewa vizuri. Timu yetu inafanyia kazi swali lako. Unaweza kutupigia +254757579531 au kututumia barua pepe techgeof@gmail.com kwa majibu ya haraka.",
-  location: "Tupo Mombasa, Kenya. Karibu!",
-  greeting: "Habari! Karibu TechGeo!",
-  company: "TechGeo ni kampuni ya teknolojia inayotoa suluhisho za kidijitali.",
-  contact: "Wasiliana nasi: info@techgeo.com au piga +254-xxx-xxx",
-  services: "Tunatoa huduma za: ukuzaji wa tovuti, programu za simu, na suluhisho za wingu.",
-  pricing: "Wasiliana na timu yetu ya mauzo kwa bei na gharama.",
-  hours: "Tunafanya kazi Jumatatu-Ijumaa 9AM-6PM EAT",
-  team: "Timu yetu ina wataalamu wenye ujuzi wa teknolojia.",
-  portfolio: "Angalia kazi zetu kwenye techgeo.com/portfolio",
-  support: "Tukusaidie vipi leo?",
-  acknowledgement: "Asante kwa swali lako! Una swali lingine? Karibu tuwasiliane."
-};
-
-// ============================================
-// Get response in appropriate language
-// ============================================
-function getLocalizedResponse(intent, language) {
-  if (language === 'swa') {
-    return swahiliResponses[intent] || swahiliResponses.default;
-  }
-  return null; // Will use default from chat.js
-}
-
-// ============================================
 // MAIN CHAT ENDPOINT
 // ============================================
 
@@ -379,9 +356,7 @@ app.post('/api/chat', async (req, res) => {
   if (input.length === 0) {
     const lang = await detectLanguage(input);
     return res.json({ 
-      response: lang.code === 'swa' ? 
-        "Tafadhali andika ujumbe. Niko hapa kusaidia!" : 
-        "Please type a message. I'm here to help!",
+      response: "Please type a message. I'm here to help!",
       matched: false,
       confidence: 0,
       language: lang.name
@@ -390,24 +365,22 @@ app.post('/api/chat', async (req, res) => {
   
   console.log(`\n📨 Received: "${input}"`);
   
-  // ========== FEATURE 9: DETECT LANGUAGE ==========
+  // ========== DETECT LANGUAGE ==========
   const language = await detectLanguage(input);
   console.log(`🌐 Language detected: ${language.name} (${language.code})`);
   
-  // ========== FEATURE 3: CHECK PROFANITY ==========
+  // ========== CHECK PROFANITY ==========
   if (checkProfanity(input)) {
     console.log('⚠️ Profanity detected');
     return res.json({ 
-      response: language.code === 'swa' ?
-        "Tafadhali weka heshima katika mazungumzo. Nikusaidie vipi kwa kitaalamu?" :
-        "Please keep the conversation respectful. How can I help you professionally?",
+      response: "Please keep the conversation respectful. How can I help you professionally?",
       matched: false,
       confidence: 0,
       language: language.name
     });
   }
   
-  // ========== FIND MATCH ==========
+  // ========== FIND MATCH FROM chat.js ==========
   const matchResult = findBestMatch(input);
   let reply = null;
   let matched = false;
@@ -418,15 +391,7 @@ app.post('/api/chat', async (req, res) => {
     matched = true;
     confidence = matchResult.score;
     console.log(`✅ Matched: ${matchResult.type} (confidence: ${confidence}%)`);
-    
-    // Try to determine intent for Swahili response
-    const intent = matchResult.type;
-    const swahiliReply = getLocalizedResponse(intent, language.code);
-    
-    // If Swahili and we have a translation, use it
-    if (language.code === 'swa' && swahiliReply) {
-      reply = swahiliReply;
-    }
+    console.log(`   Keywords matched: ${matchResult.matchedKeywords?.join(', ') || 'none'}`);
   }
   
   // ========== HANDLE UNMATCHED QUESTIONS ==========
@@ -435,15 +400,10 @@ app.post('/api/chat', async (req, res) => {
     
     await addUnmatchedQuestion(input, language.code);
     
-    // Provide appropriate response based on language
-    if (language.code === 'swa') {
-      reply = swahiliResponses.default;
-    } else {
-      reply = "I didn't get you well, our team is working on it. You can reach us on +254757579531 or email us at techgeof@gmail.com for quick instant answers";
-    }
+    // Default fallback response (English only - will be updated from chat.js later)
+    reply = "I didn't get you well, our team is working on it. You can reach us on +254757579531 or email us at techgeof@gmail.com for quick instant answers";
   }
   
-  // ========== FEATURE 10: ADD CONFIDENCE SCORE ==========
   console.log(`💬 Response sent (confidence: ${confidence}%)`);
   
   res.json({ 
@@ -465,7 +425,7 @@ app.get('/api/health', (req, res) => {
     responsesLoaded: processedResponses.length,
     rateLimiting: 'active',
     profanityFilter: 'active',
-    languageDetection: 'active (Swahili/English)'
+    languageDetection: 'active'
   });
 });
 
@@ -483,11 +443,10 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📚 Loaded ${processedResponses.length} response patterns`);
+  console.log(`📚 Loaded ${processedResponses.length} response patterns from chat.js`);
   console.log(`💾 MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Connecting...'}`);
   console.log(`🛡️  Rate Limiting: Active`);
   console.log(`🚫 Profanity Filter: Active (English + Swahili)`);
-  console.log(`🌐 Language Detection: Active (Swahili/English)`);
-  console.log(`📊 Confidence Scores: Active`);
-  console.log(`🇰🇪 Swahili Support: Enabled with ${Object.keys(swahiliResponses).length} responses\n`);
+  console.log(`🌐 Language Detection: Active`);
+  console.log(`📊 Confidence Scores: Active\n`);
 });
