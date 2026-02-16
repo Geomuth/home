@@ -110,13 +110,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const fullName = registerForm.querySelector('input[type="text"]').value.trim();
         const email = registerForm.querySelector('input[type="email"]').value.trim();
         const password = registerForm.querySelector('input[type="password"]').value.trim();
+        const phoneNumber = ''; // Add input if you want to collect phone
+
         console.log('Attempting register:', { fullName, email });
 
         try {
             const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fullName, email, password })
+                body: JSON.stringify({ fullName, email, password, phoneNumber })
             });
             const data = await res.json();
             if (res.ok) {
@@ -146,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loginBtn.textContent = 'Login';
         loginBtn.removeEventListener('click', handleLogout);
         loginBtn.addEventListener('click', openLogin);
+        closeModal(chatModal); // Close chat on logout
         alert('Logged out');
     }
 
@@ -160,14 +163,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Search Modal ─────────────────────────────────────────────
     searchBtn?.addEventListener('click', () => searchModal.classList.add('active'));
 
-    // ── Chat Access Control + Send ───────────────────────────────
+    // ── Chat Access & Toggle ────────────────────────────────
     messageIcon?.addEventListener('click', () => {
         if (!isLoggedIn()) {
             authModal.classList.add('active');
             return;
         }
-        chatModal.classList.add('active');
-        userInput?.focus();
+
+        // Toggle chat modal open/close
+        if (chatModal.classList.contains('active')) {
+            chatModal.classList.remove('active');
+        } else {
+            chatModal.classList.add('active');
+            userInput?.focus();
+        }
     });
 
     function toggleSendButton() {
