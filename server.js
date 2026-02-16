@@ -24,7 +24,7 @@ const app = express();
 // ────────────────────────────────────────────────
 app.set('trust proxy', 1);  // Fixes rate-limit X-Forwarded-For warning on Vercel
 
-// Manual body parser – replaces express.json() for Vercel reliability
+// Manual body parser – Vercel-proof replacement for express.json()
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     let bodyData = '';
@@ -92,6 +92,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-very-long-random-secret-chang
 const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
+  phoneNumber: { type: String, unique: true, sparse: true, trim: true }, // optional but unique if provided
   password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
@@ -104,7 +105,7 @@ const subscriberSchema = new mongoose.Schema({
 const Subscriber = mongoose.model('Subscriber', subscriberSchema);
 
 // ────────────────────────────────────────────────
-// REGISTER
+// REGISTER – improved duplicate messages
 // ────────────────────────────────────────────────
 
 app.post('/api/register', async (req, res) => {
@@ -112,7 +113,7 @@ app.post('/api/register', async (req, res) => {
 
   try {
     const body = req.body || {};
-    const { fullName, email, password } = body;
+    const { fullName, email, password, phoneNumber } = body;
 
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: 'Full name, email and password are required' });
@@ -122,22 +123,29 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    const existing = await User.findOne({ email });
-    if (existing) {
-      return res.status(409).json({ message: 'Email already registered' });
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) {
+      return res.status(409).json({ message: 'A user with this email already exists.' });
+    }
+
+    if (phoneNumber) {
+      const existingPhone = await User.findOne({ phoneNumber });
+      if (existingPhone) {
+        return res.status(409).json({ message: 'This phone number is already registered.' });
+      }
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(password, salt);
 
-    const user = new User({ fullName, email, password: hashed });
+    const user = new User({ fullName, email, password: hashed, phoneNumber });
     await user.save();
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
       token,
-      user: { id: user._id, fullName: user.fullName, email: user.email }
+      user: { id: user._id, fullName: user.fullName, email: user.email, phoneNumber }
     });
   } catch (err) {
     console.error('Register error:', err.message);
@@ -174,7 +182,7 @@ app.post('/api/login', async (req, res) => {
 
     res.json({
       token,
-      user: { id: user._id, fullName: user.fullName, email: user.email }
+      user: { id: user._id, fullName: user.fullName, email: user.email, phoneNumber: user.phoneNumber }
     });
   } catch (err) {
     console.error('Login error:', err.message);
@@ -183,7 +191,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ────────────────────────────────────────────────
-// SUBSCRIBE
+// SUBSCRIBE – improved already-subscribed message
 // ────────────────────────────────────────────────
 
 app.post('/api/subscribe', async (req, res) => {
@@ -199,7 +207,7 @@ app.post('/api/subscribe', async (req, res) => {
 
     const existing = await Subscriber.findOne({ email });
     if (existing) {
-      return res.status(409).json({ message: 'This email is already subscribed' });
+      return res.status(409).json({ message: 'You are already subscribed with this email.' });
     }
 
     const sub = new Subscriber({ email });
@@ -213,7 +221,7 @@ app.post('/api/subscribe', async (req, res) => {
 });
 
 // ────────────────────────────────────────────────
-// YOUR ORIGINAL CODE (unchanged below this point)
+// CHAT & HELPERS (your original code)
 // ────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, '.')));
@@ -226,9 +234,7 @@ const processedResponses = Object.entries(chatResponses).map(([keywords, respons
 }));
 console.log(`📚 Loaded ${processedResponses.length} response patterns`);
 
-// ── Your helper functions (paste them here unchanged) ──
-// calculateSimilarity, detectLanguage, checkProfanity, findBestMatch, logUnmatched
-
+// Helper functions
 function calculateSimilarity(str1, str2) {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
@@ -260,6 +266,8 @@ async function detectLanguage(text) {
   }
 }
 
+const filter = new Filter();
+
 function checkProfanity(text) {
   const swaBad = ['kuma','mbwa','pumbafu','mjinga','fala','mboro','mshenzi','mnyama','kiboko'];
   const lower = text.toLowerCase();
@@ -273,7 +281,6 @@ function findBestMatch(input) {
   let bestScore = 0;
   let bestType = 'none';
   let bestKeywords = [];
-  // ── 1. Priority business questions first ──
   const priorityChecks = [
     { keys: ['bei','price','cost','how much','pesa ngapi','bei gani','gharama','kiasi gani'], category: 'pricing' },
     { keys: ['tovuti','website','web development','kujenga tovuti','kutengeneza tovuti','web design'], category: 'website' },
@@ -300,7 +307,6 @@ function findBestMatch(input) {
       }
     }
   }
-  // ── 2. Normal contains (but only decent length keywords) ──
   if (bestScore < 70) {
     for (const r of processedResponses) {
       for (const kw of r.keywords) {
@@ -317,7 +323,6 @@ function findBestMatch(input) {
       }
     }
   }
-  // ── 3. Word / partial match (fallback) ──
   if (bestScore < 50) {
     for (const r of processedResponses) {
       let score = 0;
@@ -340,7 +345,6 @@ function findBestMatch(input) {
       }
     }
   }
-  // ── 4. Similarity only when really low confidence ──
   if (bestScore < 30) {
     for (const r of processedResponses) {
       for (const kw of r.keywords) {
