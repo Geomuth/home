@@ -6,58 +6,45 @@ const chatResponses = require('./chat.js');
 const rateLimit = require('express-rate-limit');
 const Filter = require('bad-words');
 
-// Dynamic import for franc (ES Module)
+// Dynamic import for franc
 let franc;
 let langs;
-
-// Load ES modules dynamically
 (async () => {
-  franc = await import('franc');
+  const francModule = await import('franc');
+  franc = francModule.franc;
   langs = await import('langs');
 })();
 
 const app = express();
 const filter = new Filter();
 
-// ============================================
-// FEATURE 1: RATE LIMITING
-// ============================================
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
-  message: { 
-    error: 'Too many requests, please try again later',
-    response: null 
-  },
+  message: { error: 'Too many requests, please try again later', response: null },
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 app.use('/api/', limiter);
 
-// ============================================
-// MongoDB Connection
-// ============================================
+// MongoDB
 const MONGODB_URI = process.env.techgeo_MONGODB_URI;
-
 if (!MONGODB_URI) {
-  console.error('❌ Missing techgeo_MONGODB_URI environment variable');
+  console.error('❌ Missing techgeo_MONGODB_URI');
   process.exit(1);
 }
 
 const connectWithRetry = () => {
   mongoose.connect(MONGODB_URI)
-    .then(() => console.log('✅ Connected to MongoDB Atlas'))
+    .then(() => console.log('✅ MongoDB connected'))
     .catch(err => {
-      console.error('❌ MongoDB Connection Error:', err);
-      console.log('🔄 Retrying in 5 seconds...');
+      console.error('❌ MongoDB error:', err.message);
       setTimeout(connectWithRetry, 5000);
     });
 };
-
 connectWithRetry();
 
-// Define Schema for unmatched questions
 const questionSchema = new mongoose.Schema({
   question: { type: String, required: true },
   timestamp: { type: String, default: () => new Date().toLocaleString() },
@@ -65,388 +52,273 @@ const questionSchema = new mongoose.Schema({
   lastAsked: { type: String, default: () => new Date().toLocaleString() },
   language: { type: String, default: 'unknown' }
 });
-
 const Question = mongoose.model('Question', questionSchema);
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '.')));
 
-// ============================================
-// Preprocess responses from chat.js
-// ============================================
-const processedResponses = (() => {
-  const responses = [];
-  for (const [keywords, response] of Object.entries(chatResponses)) {
-    const keywordList = keywords.split('|').map(k => k.toLowerCase().trim());
-    responses.push({
-      keywords: keywordList,
-      response: response,
-      allKeywords: keywords
-    });
-  }
-  return responses;
-})();
+// Preprocess chat.js responses
+const processedResponses = Object.entries(chatResponses).map(([keywords, response]) => ({
+  keywords: keywords.split('|').map(k => k.toLowerCase().trim()),
+  response,
+  originalKey: keywords
+}));
+console.log(`📚 Loaded ${processedResponses.length} response patterns`);
 
-console.log(`📚 Loaded ${processedResponses.length} response patterns from chat.js`);
-
-// ============================================
-// Helper Functions
-// ============================================
+// ────────────────────────────────────────────────
+// HELPERS
+// ────────────────────────────────────────────────
 
 function calculateSimilarity(str1, str2) {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
-  
   if (s1 === s2) return 100;
-  if (s1.includes(s2) || s2.includes(s1)) return 80;
-  
-  const words1 = new Set(s1.split(/\s+/));
-  const words2 = new Set(s2.split(/\s+/));
-  const intersection = new Set([...words1].filter(x => words2.has(x)));
-  const union = new Set([...words1, ...words2]);
-  
-  if (union.size === 0) return 0;
-  
-  return (intersection.size / union.size) * 60;
+  if (s1.includes(s2) || s2.includes(s1)) return 82;
+
+  const words1 = new Set(s1.split(/\s+/).filter(Boolean));
+  const words2 = new Set(s2.split(/\s+/).filter(Boolean));
+  const inter = [...words1].filter(x => words2.has(x)).length;
+  const union = words1.size + words2.size - inter;
+  return union === 0 ? 0 : Math.round((inter / union) * 85);
 }
 
-// ============================================
-// FEATURE 9: LANGUAGE DETECTION 
-// ============================================
-async function detectLanguage(input) {
+async function detectLanguage(text) {
   try {
-    // Wait for franc to be loaded if not already
-    if (!franc) {
-      franc = await import('franc');
-      langs = await import('langs');
-    }
-    
-    const detectedLang = franc.franc(input);
-    
-    // Check for Swahili specific keywords
-    const swahiliKeywords = ['habari', 'sasa', 'mambo', 'vipi', 'tafadhali', 'asante', 
-                             'sawa', 'ndio', 'hapana', 'sijui', 'naomba', 'msaada',
-                             'bei', 'gharama', 'wapi', 'nani', 'lini', 'kwa nini',
-                             'jina', 'umri', 'kazini', 'nyumbani', 'safari'];
-    
-    const inputLower = input.toLowerCase();
-    const hasSwahili = swahiliKeywords.some(keyword => inputLower.includes(keyword));
-    
-    // Override if Swahili detected
-    if (hasSwahili || detectedLang === 'swa') {
-      return { code: 'swa', name: 'Swahili' };
-    }
-    
-    if (detectedLang === 'und' || detectedLang === 'eng') {
+    const lower = text.toLowerCase().trim();
+    if (lower.length < 6) {
+      const swaShort = ['habari','sasa','mambo','vipi','asante','sawa','bei','wapi','simu','tovuti','app','programu','msaada'];
+      if (swaShort.some(w => lower.includes(w))) return { code: 'swa', name: 'Swahili' };
       return { code: 'eng', name: 'English' };
     }
-    
-    return { code: 'eng', name: 'English' };
-  } catch (error) {
-    console.log('Language detection error:', error);
-    return { code: 'eng', name: 'English' };
-  }
-}
 
-// ============================================
-// FEATURE 3: PROFANITY FILTER 
-// ============================================
-function checkProfanity(input) {
-  // Add Swahili profanity words
-  const swahiliProfanity = ['kuma', 'mbwa', 'pumbafu', 'mjinga', 'fala', 'mboro']; 
-  
-  const inputLower = input.toLowerCase();
-  
-  // Check English profanity
-  if (filter.isProfane(input)) {
-    return true;
-  }
-  
-  // Check Swahili profanity
-  for (const word of swahiliProfanity) {
-    if (inputLower.includes(word)) {
-      return true;
+    const code = franc(text);
+    const swaKeywords = ['habari','mambo','vipi','sasa','asante','tafadhali','bei','gharama','wapi','namba','simu','tovuti','programu','msaada','kwaheri'];
+
+    if (swaKeywords.some(k => lower.includes(k)) || code === 'swa') {
+      return { code: 'swa', name: 'Swahili' };
     }
+    return { code: 'eng', name: 'English' };
+  } catch {
+    return { code: 'eng', name: 'English' };
   }
-  
-  return false;
 }
 
-// ============================================
-// Main matching function (works with all languages from chat.js)
-// ============================================
+function checkProfanity(text) {
+  const swaBad = ['kuma','mbwa','pumbafu','mjinga','fala','mboro','mshenzi','mnyama','kiboko'];
+  const lower = text.toLowerCase();
+  return filter.isProfane(text) || swaBad.some(w => lower.includes(w));
+}
+
+// ────────────────────────────────────────────────
+// IMPROVED MATCHING – this is the main upgrade
+// ────────────────────────────────────────────────
 function findBestMatch(input) {
-  const normalizedInput = input.toLowerCase().trim();
-  const inputWords = normalizedInput.split(/\s+/);
-  
-  let bestMatch = null;
-  let highestScore = 0;
-  let matchType = 'none';
-  let matchedKeywords = [];
-  
-  // PHASE 1: Exact match (highest priority)
-  for (const response of processedResponses) {
-    for (const keyword of response.keywords) {
-      if (normalizedInput === keyword) {
-        return {
-          response: response.response,
-          score: 100,
-          type: 'exact',
-          matchedKeyword: keyword
-        };
-      }
-    }
-  }
-  
-  // PHASE 2: Contains match
-  for (const response of processedResponses) {
-    for (const keyword of response.keywords) {
-      if (normalizedInput.includes(keyword)) {
-        const score = 80 + (keyword.length * 0.5);
-        if (score > highestScore) {
-          highestScore = score;
-          bestMatch = response.response;
-          matchType = 'contains';
-          matchedKeywords = [keyword];
+  const norm = input.toLowerCase().trim();
+  if (!norm) return null;
+
+  let best = null;
+  let bestScore = 0;
+  let bestType = 'none';
+  let bestKeywords = [];
+
+  // ── 1. Priority business questions first ──
+  const priorityChecks = [
+    { keys: ['bei','price','cost','how much','pesa ngapi','bei gani','gharama','kiasi gani'], category: 'pricing' },
+    { keys: ['tovuti','website','web development','kujenga tovuti','kutengeneza tovuti','web design'], category: 'website' },
+    { keys: ['app','programu ya simu','mobile app','application','android','ios'], category: 'mobile apps' },
+    { keys: ['wapi','location','address','ofisi iko wapi','tupo wapi','mnakaa wapi'], category: 'location' },
+    { keys: ['namba','simu','phone','whatsapp','contact','wasiliana','barua pepe','email'], category: 'contact' },
+    { keys: ['saa','hours','fungua','funga','masaa ya kazi','open','closed'], category: 'hours' },
+    { keys: ['huduma','services','mnatoa nini','what do you offer'], category: 'services' },
+    { keys: ['kazi','portfolio','projects','kazi zetu','past work'], category: 'portfolio' },
+    { keys: ['ushauri','consultation','free consultation','mkakati'], category: 'consultation' },
+  ];
+
+  for (const p of priorityChecks) {
+    const matched = p.keys.filter(k => norm.includes(k));
+    if (matched.length > 0) {
+      const entry = processedResponses.find(r => r.originalKey.includes(p.category));
+      if (entry) {
+        const score = 88 + matched.length * 6 + matched.reduce((s, k) => s + k.length, 0) * 0.4;
+        if (score > bestScore) {
+          bestScore = score;
+          best = entry.response;
+          bestType = 'priority';
+          bestKeywords = matched;
         }
       }
     }
   }
-  
-  // PHASE 3: Word matching
-  if (!bestMatch) {
-    for (const response of processedResponses) {
-      let wordMatchCount = 0;
-      const matchedInThisResponse = [];
-      
-      for (const keyword of response.keywords) {
-        const keywordWords = keyword.split(/\s+/);
-        
-        for (const kw of keywordWords) {
-          for (const word of inputWords) {
-            if (word === kw) {
-              wordMatchCount += 2;
-              matchedInThisResponse.push(kw);
-            }
-            else if (word.length > 3 && kw.length > 3) {
-              if (word.includes(kw) || kw.includes(word)) {
-                wordMatchCount += 1;
-                matchedInThisResponse.push(kw + '(partial)');
-              }
-              const similarity = calculateSimilarity(word, kw);
-              if (similarity > 70) {
-                wordMatchCount += 1.5;
-                matchedInThisResponse.push(kw + '(similar)');
-              }
-            }
-          }
-        }
-      }
-      
-      if (wordMatchCount > highestScore) {
-        highestScore = wordMatchCount;
-        bestMatch = response.response;
-        matchType = 'word';
-        matchedKeywords = [...new Set(matchedInThisResponse)];
-      }
-    }
-  }
-  
-  // PHASE 4: Similarity check for difficult matches
-  if (!bestMatch || highestScore < 5) {
-    for (const response of processedResponses) {
-      for (const keyword of response.keywords) {
-        const similarity = calculateSimilarity(normalizedInput, keyword);
-        if (similarity > 65) {
-          if (similarity > highestScore) {
-            highestScore = similarity;
-            bestMatch = response.response;
-            matchType = 'similar';
-            matchedKeywords = [keyword];
+
+  // ── 2. Normal contains (but only decent length keywords) ──
+  if (bestScore < 70) {
+    for (const r of processedResponses) {
+      for (const kw of r.keywords) {
+        if (kw.length < 5) continue;
+        if (norm.includes(kw)) {
+          const score = 75 + kw.length * 0.9;
+          if (score > bestScore) {
+            bestScore = score;
+            best = r.response;
+            bestType = 'contains';
+            bestKeywords = [kw];
           }
         }
       }
     }
   }
-  
-  if (bestMatch && highestScore > 10) {
+
+  // ── 3. Word / partial match (fallback) ──
+  if (bestScore < 50) {
+    for (const r of processedResponses) {
+      let score = 0;
+      const matched = [];
+      for (const kw of r.keywords) {
+        if (kw.length < 5) continue;
+        const parts = kw.split(/\s+/);
+        for (const part of parts) {
+          if (norm.includes(part)) {
+            score += part.length > 6 ? 4 : 2.5;
+            matched.push(part);
+          }
+        }
+      }
+      if (score > bestScore && score > 12) {
+        bestScore = score;
+        best = r.response;
+        bestType = 'word';
+        bestKeywords = [...new Set(matched)];
+      }
+    }
+  }
+
+  // ── 4. Similarity only when really low confidence ──
+  if (bestScore < 30) {
+    for (const r of processedResponses) {
+      for (const kw of r.keywords) {
+        if (kw.length < 6) continue;
+        const sim = calculateSimilarity(norm, kw);
+        if (sim > 78 && sim > bestScore) {
+          bestScore = sim;
+          best = r.response;
+          bestType = 'similar';
+          bestKeywords = [kw];
+        }
+      }
+    }
+  }
+
+  if (best && bestScore > 18) {
     return {
-      response: bestMatch,
-      score: Math.round(highestScore),
-      type: matchType,
-      matchedKeywords: matchedKeywords
+      response: best,
+      score: Math.round(bestScore),
+      type: bestType,
+      matchedKeywords: bestKeywords
     };
   }
-  
+
   return null;
 }
 
-// Enhanced unmatched question saving
-async function addUnmatchedQuestion(questionText, language = 'unknown') {
+// ────────────────────────────────────────────────
+// UNMATCHED LOGGING
+// ────────────────────────────────────────────────
+async function logUnmatched(question, langCode = 'unknown') {
   try {
-    const normalizedQuestion = questionText.toLowerCase().trim();
-    
-    const existingQuestion = await Question.findOne({
-      question: { $regex: new RegExp('^' + normalizedQuestion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }
-    });
-    
-    if (existingQuestion) {
-      existingQuestion.askedCount += 1;
-      existingQuestion.lastAsked = new Date().toLocaleString();
-      await existingQuestion.save();
-      console.log(`📊 Updated count for: "${questionText}" (asked ${existingQuestion.askedCount} times)`);
-      
-      if (existingQuestion.askedCount === 5) {
-        console.log('🔔 POPULAR QUESTION ALERT: Consider adding to chat.js!');
+    const norm = question.toLowerCase().trim();
+    let q = await Question.findOne({ question: { $regex: new RegExp(`^${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+
+    if (q) {
+      q.askedCount += 1;
+      q.lastAsked = new Date().toLocaleString();
+      await q.save();
+      if (q.askedCount % 5 === 0) {
+        console.log(`🔥 Popular unmatched: "${question}" × ${q.askedCount}`);
       }
-      
-      return { saved: true, isNew: false, count: existingQuestion.askedCount };
     } else {
-      const newQuestion = new Question({
-        question: questionText,
-        language: language,
-        askedCount: 1,
-        lastAsked: new Date().toLocaleString()
-      });
-      await newQuestion.save();
-      console.log(`💾 Saved new question: "${questionText}" (Language: ${language})`);
-      return { saved: true, isNew: true, count: 1 };
+      q = new Question({ question, language: langCode });
+      await q.save();
+      console.log(`💾 New unmatched: "${question}" (${langCode})`);
     }
   } catch (err) {
-    console.error('Database save error:', err);
-    return { saved: false };
+    console.error('MongoDB save failed:', err.message);
   }
 }
 
-// ============================================
+// ────────────────────────────────────────────────
 // MAIN CHAT ENDPOINT
-// ============================================
-
+// ────────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
-  
-  // ========== INPUT VALIDATION ==========
-  if (!message) {
-    return res.status(400).json({ 
-      error: 'Message is required',
-      response: null,
-      confidence: 0
-    });
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'Message required', response: null });
   }
-  
-  if (typeof message !== 'string') {
-    return res.status(400).json({ 
-      error: 'Message must be a string',
-      response: null,
-      confidence: 0
-    });
-  }
-  
-  if (message.length > 500) {
-    return res.status(400).json({ 
-      error: 'Message too long (max 500 characters)',
-      response: null,
-      confidence: 0
-    });
-  }
-  
+
   const input = message.trim();
-  
-  if (input.length === 0) {
-    const lang = await detectLanguage(input);
-    return res.json({ 
-      response: "Please type a message. I'm here to help!",
+  if (input.length > 500) {
+    return res.status(400).json({ error: 'Message too long', response: null });
+  }
+
+  console.log(`\n→ ${input}`);
+
+  const lang = await detectLanguage(input);
+  console.log(`   lang: ${lang.name}`);
+
+  if (checkProfanity(input)) {
+    return res.json({
+      response: "Tafadhali tumia lugha safi na ya heshima. Tunaweza kukusaidia vipi kitaalamu?",
       matched: false,
       confidence: 0,
       language: lang.name
     });
   }
-  
-  console.log(`\n📨 Received: "${input}"`);
-  
-  // ========== DETECT LANGUAGE ==========
-  const language = await detectLanguage(input);
-  console.log(`🌐 Language detected: ${language.name} (${language.code})`);
-  
-  // ========== CHECK PROFANITY ==========
-  if (checkProfanity(input)) {
-    console.log('⚠️ Profanity detected');
-    return res.json({ 
-      response: "Please keep the conversation respectful. How can I help you professionally?",
-      matched: false,
-      confidence: 0,
-      language: language.name
-    });
-  }
-  
-  // ========== FIND MATCH FROM chat.js ==========
-  const matchResult = findBestMatch(input);
-  let reply = null;
-  let matched = false;
-  let confidence = 0;
-  
-  if (matchResult) {
-    reply = matchResult.response;
+
+  const match = findBestMatch(input);
+
+  let reply, matched = false, confidence = 0;
+
+  if (match) {
+    reply = match.response;
     matched = true;
-    confidence = matchResult.score;
-    console.log(`✅ Matched: ${matchResult.type} (confidence: ${confidence}%)`);
-    console.log(`   Keywords matched: ${matchResult.matchedKeywords?.join(', ') || 'none'}`);
+    confidence = match.score;
+    console.log(`   MATCH: ${match.type} (${confidence}%)  →  ${match.matchedKeywords.join(', ')}`);
+  } else {
+    await logUnmatched(input, lang.code);
+    reply = 
+      "Samahani, bado sielewi swali lako vizuri 😅\n\n" +
+      "Unauliza kuhusu bei, kutengeneza tovuti, app, namba ya simu, au kitu kingine?\n\n" +
+      "Au unaweza tuwasiliana moja kwa moja:\n" +
+      "📞 +254 757 579 531\n" +
+      "📧 techgeof@gmail.com";
   }
-  
-  // ========== HANDLE UNMATCHED QUESTIONS ==========
-  if (!reply) {
-    console.log(`❌ No match found for: "${input}"`);
-    
-    await addUnmatchedQuestion(input, language.code);
-    
-    // Default fallback response (English only - will be updated from chat.js later)
-    reply = "I didn't get you well, our team is working on it. You can reach us on +254757579531 or email us at techgeof@gmail.com for quick instant answers";
-  }
-  
-  console.log(`💬 Response sent (confidence: ${confidence}%)`);
-  
-  res.json({ 
-    response: reply,
-    matched: matched,
-    confidence: confidence,
-    language: language.name
-  });
-});
 
-// ============================================
-// Health check endpoint
-// ============================================
-app.get('/api/health', (req, res) => {
   res.json({
-    status: 'healthy',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString(),
-    responsesLoaded: processedResponses.length,
-    rateLimiting: 'active',
-    profanityFilter: 'active',
-    languageDetection: 'active'
+    response: reply,
+    matched,
+    confidence,
+    language: lang.name
   });
 });
 
-// ============================================
-// STATIC FILES AND SERVER
-// ============================================
+// Health
+app.get('/api/health', (_, res) => {
+  res.json({
+    status: 'ok',
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    responses: processedResponses.length,
+    rateLimit: 'active',
+    profanity: 'active',
+    langDetection: 'active'
+  });
+});
 
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
-  }
+// SPA fallback
+app.get('*', (_, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📚 Loaded ${processedResponses.length} response patterns from chat.js`);
-  console.log(`💾 MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Connecting...'}`);
-  console.log(`🛡️  Rate Limiting: Active`);
-  console.log(`🚫 Profanity Filter: Active (English + Swahili)`);
-  console.log(`🌐 Language Detection: Active`);
-  console.log(`📊 Confidence Scores: Active\n`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
