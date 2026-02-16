@@ -1,32 +1,31 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ── Elements ─────────────────────────────────────────────────
-    const hamburger    = document.getElementById('hamburger');
-    const navLinks     = document.getElementById('nav-links');
-    const messageIcon  = document.getElementById('message');
-    const chatModal    = document.getElementById('ai-chat');
-    const chatClose    = document.getElementById('chatClose');
-    const loginBtn     = document.getElementById('loginBtn');
-    const authModal    = document.getElementById('authModal');
-    const closeAuth    = document.getElementById('closeAuth');
-    const searchBtn    = document.getElementById('searchBtn');
-    const searchModal  = document.getElementById('searchModal');
-    const closeSearch  = document.getElementById('closeSearch');
-    const showLogin    = document.getElementById('showLogin');
+    const hamburger = document.getElementById('hamburger');
+    const navLinks = document.getElementById('nav-links');
+    const messageIcon = document.getElementById('message');
+    const chatModal = document.getElementById('ai-chat');
+    const chatClose = document.getElementById('chatClose');
+    const loginBtn = document.getElementById('loginBtn');
+    const authModal = document.getElementById('authModal');
+    const closeAuth = document.getElementById('closeAuth');
+    const searchBtn = document.getElementById('searchBtn');
+    const searchModal = document.getElementById('searchModal');
+    const closeSearch = document.getElementById('closeSearch');
+    const showLogin = document.getElementById('showLogin');
     const showRegister = document.getElementById('showRegister');
-    const loginForm    = document.getElementById('loginForm');
+    const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
-    const sendBtn      = document.getElementById('sendBtn');
-    const userInput    = document.getElementById('userInput');
-    const chatBox      = document.getElementById('chatBox');
-    const subscribeForm   = document.getElementById('subscribeForm');
-    const subscribeMsg    = document.getElementById('subscribeMessage');
+    const sendBtn = document.getElementById('sendBtn');
+    const userInput = document.getElementById('userInput');
+    const chatBox = document.getElementById('chatBox');
+    const subscribeForm = document.getElementById('subscribeForm');
+    const subscribeMsg = document.getElementById('subscribeMessage');
 
     // ── Helpers ──────────────────────────────────────────────────
     const getToken = () => localStorage.getItem('techgeo_token');
     const setToken = token => localStorage.setItem('techgeo_token', token);
     const removeToken = () => localStorage.removeItem('techgeo_token');
     const isLoggedIn = () => !!getToken();
-
     const closeModal = modal => modal?.classList.remove('active');
 
     // ── Mobile Menu ──────────────────────────────────────────────
@@ -81,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const email = loginForm.querySelector('input[type="email"]').value.trim();
         const password = loginForm.querySelector('input[type="password"]').value.trim();
+        console.log('Attempting login:', { email });
 
         try {
             const res = await fetch('/api/login', {
@@ -89,7 +89,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ email, password })
             });
             const data = await res.json();
-
             if (res.ok) {
                 setToken(data.token);
                 closeModal(authModal);
@@ -101,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(data.message || 'Login failed');
             }
         } catch (err) {
+            console.error('Login fetch error:', err);
             alert('Network error – please try again');
         }
     });
@@ -108,8 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
     registerForm?.addEventListener('submit', async e => {
         e.preventDefault();
         const fullName = registerForm.querySelector('input[type="text"]').value.trim();
-        const email    = registerForm.querySelector('input[type="email"]').value.trim();
+        const email = registerForm.querySelector('input[type="email"]').value.trim();
         const password = registerForm.querySelector('input[type="password"]').value.trim();
+        console.log('Attempting register:', { fullName, email });
 
         try {
             const res = await fetch('/api/register', {
@@ -118,7 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ fullName, email, password })
             });
             const data = await res.json();
-
             if (res.ok) {
                 setToken(data.token);
                 closeModal(authModal);
@@ -130,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(data.message || 'Registration failed');
             }
         } catch (err) {
+            console.error('Register fetch error:', err);
             alert('Network error – please try again');
         }
     });
@@ -148,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Logged out');
     }
 
-    // Initial setup
+    // Initial setup for login/logout button
     if (isLoggedIn()) {
         loginBtn.textContent = 'Logout';
         loginBtn.addEventListener('click', handleLogout);
@@ -210,6 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             document.getElementById(loadingId).innerHTML = `<p>${data.response}</p>`;
         } catch (err) {
+            console.error('Chat fetch error:', err);
             document.getElementById(loadingId).innerHTML = `<p style="color:#e74c3c;">Error: ${err.message}</p>`;
         }
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -228,7 +230,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Newsletter Subscription ──────────────────────────────────
     subscribeForm?.addEventListener('submit', async e => {
         e.preventDefault();
-        const email = document.getElementById('subscribeEmail').value.trim();
+        const email = document.getElementById('subscribeEmail')?.value.trim();
+        if (!email) return;
+
+        console.log('Submitting subscription:', { email });
+
         subscribeMsg.textContent = '';
         subscribeMsg.className = '';
 
@@ -238,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
             });
+
             const data = await res.json();
 
             if (res.ok) {
@@ -249,6 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 subscribeMsg.className = 'error';
             }
         } catch (err) {
+            console.error('Subscribe fetch error:', err);
             subscribeMsg.textContent = 'Network error – try again later';
             subscribeMsg.className = 'error';
         }
