@@ -18,7 +18,35 @@ let langs;
 })();
 
 const app = express();
-const filter = new Filter();
+
+// ────────────────────────────────────────────────
+// CRITICAL FIXES – MUST BE FIRST
+// ────────────────────────────────────────────────
+app.set('trust proxy', 1);  // Fixes rate-limit X-Forwarded-For warning on Vercel
+
+// Manual body parser – replaces express.json() for Vercel reliability
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    let bodyData = '';
+    req.on('data', chunk => {
+      bodyData += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        req.body = bodyData.trim() ? JSON.parse(bodyData) : {};
+        console.log(`[BODY] ${req.method} ${req.path}:`, req.body);
+        next();
+      } catch (err) {
+        console.error(`[BODY PARSE ERROR] ${req.path}:`, err.message);
+        res.status(400).json({ message: 'Invalid JSON in request body' });
+      }
+    });
+  } else {
+    next();
+  }
+});
+
+app.use(cors());
 
 // Rate limiting
 const limiter = rateLimit({
@@ -80,8 +108,11 @@ const Subscriber = mongoose.model('Subscriber', subscriberSchema);
 // ────────────────────────────────────────────────
 
 app.post('/api/register', async (req, res) => {
+  console.log('Register hit - body:', req.body);
+
   try {
-    const { fullName, email, password } = req.body;
+    const body = req.body || {};
+    const { fullName, email, password } = body;
 
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: 'Full name, email and password are required' });
@@ -119,8 +150,11 @@ app.post('/api/register', async (req, res) => {
 // ────────────────────────────────────────────────
 
 app.post('/api/login', async (req, res) => {
+  console.log('Login hit - body:', req.body);
+
   try {
-    const { email, password } = req.body;
+    const body = req.body || {};
+    const { email, password } = body;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password required' });
@@ -149,12 +183,15 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ────────────────────────────────────────────────
-// SUBSCRIBE (email newsletter)
+// SUBSCRIBE
 // ────────────────────────────────────────────────
 
 app.post('/api/subscribe', async (req, res) => {
+  console.log('Subscribe hit - body:', req.body);
+
   try {
-    const { email } = req.body;
+    const body = req.body || {};
+    const { email } = body;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: 'Valid email required' });
@@ -176,11 +213,9 @@ app.post('/api/subscribe', async (req, res) => {
 });
 
 // ────────────────────────────────────────────────
-// (your original code continues unchanged below)
+// YOUR ORIGINAL CODE (unchanged below this point)
 // ────────────────────────────────────────────────
 
-app.use(cors());
-app.use(express.json());
 app.use(express.static(path.join(__dirname, '.')));
 
 // Preprocess chat.js responses
@@ -191,11 +226,175 @@ const processedResponses = Object.entries(chatResponses).map(([keywords, respons
 }));
 console.log(`📚 Loaded ${processedResponses.length} response patterns`);
 
-// HELPERS, calculateSimilarity, detectLanguage, checkProfanity, findBestMatch, logUnmatched
-// ... (your original helper functions remain here unchanged)
+// ── Your helper functions (paste them here unchanged) ──
+// calculateSimilarity, detectLanguage, checkProfanity, findBestMatch, logUnmatched
+
+function calculateSimilarity(str1, str2) {
+  const s1 = str1.toLowerCase().trim();
+  const s2 = str2.toLowerCase().trim();
+  if (s1 === s2) return 100;
+  if (s1.includes(s2) || s2.includes(s1)) return 82;
+  const words1 = new Set(s1.split(/\s+/).filter(Boolean));
+  const words2 = new Set(s2.split(/\s+/).filter(Boolean));
+  const inter = [...words1].filter(x => words2.has(x)).length;
+  const union = words1.size + words2.size - inter;
+  return union === 0 ? 0 : Math.round((inter / union) * 85);
+}
+
+async function detectLanguage(text) {
+  try {
+    const lower = text.toLowerCase().trim();
+    if (lower.length < 6) {
+      const swaShort = ['habari','sasa','mambo','vipi','asante','sawa','bei','wapi','simu','tovuti','app','programu','msaada'];
+      if (swaShort.some(w => lower.includes(w))) return { code: 'swa', name: 'Swahili' };
+      return { code: 'eng', name: 'English' };
+    }
+    const code = franc(text);
+    const swaKeywords = ['habari','mambo','vipi','sasa','asante','tafadhali','bei','gharama','wapi','namba','simu','tovuti','programu','msaada','kwaheri'];
+    if (swaKeywords.some(k => lower.includes(k)) || code === 'swa') {
+      return { code: 'swa', name: 'Swahili' };
+    }
+    return { code: 'eng', name: 'English' };
+  } catch {
+    return { code: 'eng', name: 'English' };
+  }
+}
+
+function checkProfanity(text) {
+  const swaBad = ['kuma','mbwa','pumbafu','mjinga','fala','mboro','mshenzi','mnyama','kiboko'];
+  const lower = text.toLowerCase();
+  return filter.isProfane(text) || swaBad.some(w => lower.includes(w));
+}
+
+function findBestMatch(input) {
+  const norm = input.toLowerCase().trim();
+  if (!norm) return null;
+  let best = null;
+  let bestScore = 0;
+  let bestType = 'none';
+  let bestKeywords = [];
+  // ── 1. Priority business questions first ──
+  const priorityChecks = [
+    { keys: ['bei','price','cost','how much','pesa ngapi','bei gani','gharama','kiasi gani'], category: 'pricing' },
+    { keys: ['tovuti','website','web development','kujenga tovuti','kutengeneza tovuti','web design'], category: 'website' },
+    { keys: ['app','programu ya simu','mobile app','application','android','ios'], category: 'mobile apps' },
+    { keys: ['wapi','location','address','ofisi iko wapi','tupo wapi','mnakaa wapi'], category: 'location' },
+    { keys: ['namba','simu','phone','whatsapp','contact','wasiliana','barua pepe','email'], category: 'contact' },
+    { keys: ['saa','hours','fungua','funga','masaa ya kazi','open','closed'], category: 'hours' },
+    { keys: ['huduma','services','mnatoa nini','what do you offer'], category: 'services' },
+    { keys: ['kazi','portfolio','projects','kazi zetu','past work'], category: 'portfolio' },
+    { keys: ['ushauri','consultation','free consultation','mkakati'], category: 'consultation' },
+  ];
+  for (const p of priorityChecks) {
+    const matched = p.keys.filter(k => norm.includes(k));
+    if (matched.length > 0) {
+      const entry = processedResponses.find(r => r.originalKey.includes(p.category));
+      if (entry) {
+        const score = 88 + matched.length * 6 + matched.reduce((s, k) => s + k.length, 0) * 0.4;
+        if (score > bestScore) {
+          bestScore = score;
+          best = entry.response;
+          bestType = 'priority';
+          bestKeywords = matched;
+        }
+      }
+    }
+  }
+  // ── 2. Normal contains (but only decent length keywords) ──
+  if (bestScore < 70) {
+    for (const r of processedResponses) {
+      for (const kw of r.keywords) {
+        if (kw.length < 5) continue;
+        if (norm.includes(kw)) {
+          const score = 75 + kw.length * 0.9;
+          if (score > bestScore) {
+            bestScore = score;
+            best = r.response;
+            bestType = 'contains';
+            bestKeywords = [kw];
+          }
+        }
+      }
+    }
+  }
+  // ── 3. Word / partial match (fallback) ──
+  if (bestScore < 50) {
+    for (const r of processedResponses) {
+      let score = 0;
+      const matched = [];
+      for (const kw of r.keywords) {
+        if (kw.length < 5) continue;
+        const parts = kw.split(/\s+/);
+        for (const part of parts) {
+          if (norm.includes(part)) {
+            score += part.length > 6 ? 4 : 2.5;
+            matched.push(part);
+          }
+        }
+      }
+      if (score > bestScore && score > 12) {
+        bestScore = score;
+        best = r.response;
+        bestType = 'word';
+        bestKeywords = [...new Set(matched)];
+      }
+    }
+  }
+  // ── 4. Similarity only when really low confidence ──
+  if (bestScore < 30) {
+    for (const r of processedResponses) {
+      for (const kw of r.keywords) {
+        if (kw.length < 6) continue;
+        const sim = calculateSimilarity(norm, kw);
+        if (sim > 78 && sim > bestScore) {
+          bestScore = sim;
+          best = r.response;
+          bestType = 'similar';
+          bestKeywords = [kw];
+        }
+      }
+    }
+  }
+  if (best && bestScore > 18) {
+    return {
+      response: best,
+      score: Math.round(bestScore),
+      type: bestType,
+      matchedKeywords: bestKeywords
+    };
+  }
+  return null;
+}
+
+async function logUnmatched(question, langCode = 'unknown') {
+  try {
+    const norm = question.toLowerCase().trim();
+    let q = await Question.findOne({ question: { $regex: new RegExp(`^${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+    if (q) {
+      q.askedCount += 1;
+      q.lastAsked = new Date().toLocaleString();
+      await q.save();
+      if (q.askedCount % 5 === 0) {
+        console.log(`🔥 Popular unmatched: "${question}" × ${q.askedCount}`);
+      }
+    } else {
+      q = new Question({ question, language: langCode });
+      await q.save();
+      console.log(`💾 New unmatched: "${question}" (${langCode})`);
+    }
+  } catch (err) {
+    console.error('MongoDB save failed:', err.message);
+  }
+}
+
+// ────────────────────────────────────────────────
+// MAIN CHAT ENDPOINT
+// ────────────────────────────────────────────────
 
 app.post('/api/chat', async (req, res) => {
-  const { message } = req.body;
+  console.log('Chat hit - body:', req.body);
+
+  const { message } = req.body || {};
   if (!message || typeof message !== 'string' || !message.trim()) {
     return res.status(400).json({ error: 'Message required', response: null });
   }
