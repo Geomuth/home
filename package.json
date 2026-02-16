@@ -14,7 +14,9 @@
     "express-rate-limit": "^7.1.5",
     "bad-words": "^3.0.4",
     "franc": "^6.1.0",
-    "langs": "^2.0.0"
+    "langs": "^2.0.0",
+    "bcryptjs": "^2.4.3",               // ← ADD THIS
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
