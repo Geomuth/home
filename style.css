@@ -777,3 +777,18 @@ body {
 .clear-btn:hover {
     background-color: #dc2626;
 }
+#subscribeMessage.success {
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+#subscribeMessage.error {
+    color: #e74c3c;
+    font-weight: 500;
+}
+
+/* Optional: disable send button visually */
+.send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
