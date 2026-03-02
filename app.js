@@ -394,22 +394,32 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Simulate sending (since there's no backend endpoint yet)
         contactFormMsg.textContent = '⏳ Sending message...';
         contactFormMsg.className = '';
 
-        // Simulate API call
-        setTimeout(() => {
-            contactFormMsg.textContent = '✓ Thank you! Your message has been sent successfully.';
-            contactFormMsg.className = 'success';
-            contactForm.reset();
-            
-            // Clear message after 5 seconds
-            setTimeout(() => {
-                contactFormMsg.textContent = '';
-                contactFormMsg.className = '';
-            }, 5000);
-        }, 1000);
+        try {
+            const res = await fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, subject, message })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                contactFormMsg.textContent = '✓ ' + data.message;
+                contactFormMsg.className = 'success';
+                contactForm.reset();
+                setTimeout(() => {
+                    contactFormMsg.textContent = '';
+                    contactFormMsg.className = '';
+                }, 6000);
+            } else {
+                contactFormMsg.textContent = '✗ ' + (data.message || 'Failed to send message');
+                contactFormMsg.className = 'error';
+            }
+        } catch (err) {
+            contactFormMsg.textContent = '✗ Network error – please try again later';
+            contactFormMsg.className = 'error';
+        }
     });
 
     // ══════════════════════════════════════════════════════════════
