@@ -7,7 +7,7 @@
 
 :root {
     --primary-color: #98e2a8;
-    --secondary-color: #3284aa;
+    --secondary-color: #8bc0a0;
     --accent-color: #918e77;
     --text-color: #1f2937;
     --light-bg: #f3f4f6;
@@ -1032,13 +1032,14 @@ footer {
         display: none;
         position: absolute;
         top: 100%;
-        left: 0;
+        left: 10;
         right: 0;
-        background: var(--white);
+        background: rgb(142, 158, 142);
         flex-direction: column;
         padding: 20px;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
         gap: 10px;
+        opacity: 0.95;
     }
 
     .nav-links.active {
