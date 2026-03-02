@@ -104,6 +104,15 @@ const subscriberSchema = new mongoose.Schema({
 });
 const Subscriber = mongoose.model('Subscriber', subscriberSchema);
 
+const contactMessageSchema = new mongoose.Schema({
+  name:      { type: String, required: true, trim: true },
+  email:     { type: String, required: true, lowercase: true, trim: true },
+  subject:   { type: String, trim: true, default: '' },
+  message:   { type: String, required: true, trim: true },
+  createdAt: { type: Date, default: Date.now }
+});
+const ContactMessage = mongoose.model('ContactMessage', contactMessageSchema);
+
 // ────────────────────────────────────────────────
 // REGISTER – improved duplicate messages
 // ────────────────────────────────────────────────
@@ -217,6 +226,31 @@ app.post('/api/subscribe', async (req, res) => {
   } catch (err) {
     console.error('Subscribe error:', err.message);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+// ────────────────────────────────────────────────
+// CONTACT FORM
+// ────────────────────────────────────────────────
+
+app.post("/api/contact", async (req, res) => {
+  console.log("Contact hit - body:", req.body);
+  try {
+    const { name, email, subject, message } = req.body || {};
+    if (!name || !email || !message) {
+      return res.status(400).json({ message: "Name, email and message are required." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "Please provide a valid email address." });
+    }
+    const contact = new ContactMessage({ name, email, subject, message });
+    await contact.save();
+    console.log(`📩 New contact message from ${name} <${email}>`);
+    res.status(201).json({ message: "Message sent successfully! We will get back to you soon." });
+  } catch (err) {
+    console.error("Contact error:", err.message);
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
 
