@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const Filter = require('bad-words');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const https = require('https');
+
 
 // Dynamic import for franc
 let franc;
@@ -257,74 +257,62 @@ YOUR BEHAVIOUR RULES:
 - Use emojis occasionally to keep the tone warm and modern.
 - If asked who made you or what AI you are, say you are GeoBot, TechGeo's assistant, and do not mention Gemini or Google.`;
 
-// Call Gemini API
+// Call Gemini API using native fetch (Node 18+)
 async function callGemini(userMessage) {
-  return new Promise((resolve, reject) => {
-    if (!GEMINI_API_KEY) {
-      return reject(new Error('GEMINI_API_KEY not set'));
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+  // Inject system prompt as the first user/model exchange so it works on all plans
+  const body = {
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: `[SYSTEM INSTRUCTIONS - follow these always]\n${TECHGEO_SYSTEM_PROMPT}\n[END SYSTEM INSTRUCTIONS]\n\nUser message: ${userMessage}` }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 512,
+      topP: 0.9
+    },
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
+    ]
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+
+    const data = await response.json();
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const msg = data?.error?.message || `HTTP ${response.status}`;
+      throw new Error(`Gemini API error: ${msg}`);
     }
 
-    const body = JSON.stringify({
-      system_instruction: {
-        parts: [{ text: TECHGEO_SYSTEM_PROMPT }]
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: userMessage }]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 512,
-        topP: 0.9
-      },
-      safetySettings: [
-        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
-      ]
-    });
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error('Empty response from Gemini');
 
-    const options = {
-      hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      }
-    };
+    return text.trim();
 
-    const req = https.request(options, (response) => {
-      let data = '';
-      response.on('data', chunk => { data += chunk; });
-      response.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.candidates && parsed.candidates[0]?.content?.parts[0]?.text) {
-            resolve(parsed.candidates[0].content.parts[0].text.trim());
-          } else if (parsed.error) {
-            reject(new Error(parsed.error.message || 'Gemini API error'));
-          } else {
-            reject(new Error('Unexpected Gemini response structure'));
-          }
-        } catch (e) {
-          reject(new Error('Failed to parse Gemini response'));
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.setTimeout(15000, () => {
-      req.destroy();
-      reject(new Error('Gemini request timed out'));
-    });
-
-    req.write(body);
-    req.end();
-  });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error('Gemini request timed out after 15s');
+    throw err;
+  }
 }
 
 // ────────────────────────────────────────────────
@@ -428,7 +416,7 @@ app.post('/api/chat', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Gemini error:', err.message);
+    console.error('❌ Gemini error:', err.message);
 
     // Graceful fallback on Gemini failure
     const fallback = language === 'Swahili'
