@@ -287,19 +287,31 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = !userInput?.value.trim();
     }
 
+    function getTime() {
+        const now = new Date();
+        return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    }
+
     async function sendMessage() {
         const text = userInput.value.trim();
         if (!text) return;
 
-        // Add user message
-        chatBox.innerHTML += `<div class="chat-message user-message"><p>${escapeHtml(text)}</p></div>`;
+        // User bubble
+        chatBox.innerHTML += `
+            <div class="chat-message user-message">
+                <div class="bubble">${escapeHtml(text)}</div>
+                <span class="msg-time">${getTime()}</span>
+            </div>`;
         userInput.value = '';
         toggleSendButton();
         chatBox.scrollTop = chatBox.scrollHeight;
 
-        // Add loading indicator
+        // Bot thinking bubble
         const loadingId = 'loading-' + Date.now();
-        chatBox.innerHTML += `<div class="chat-message bot-message" id="${loadingId}"><div>Thinking...</div></div>`;
+        chatBox.innerHTML += `
+            <div class="chat-message bot-message" id="${loadingId}">
+                <div class="bubble">...</div>
+            </div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
@@ -324,10 +336,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await res.json();
-            document.getElementById(loadingId).innerHTML = `<div>${formatBotMessage(data.response)}</div>`;
+            document.getElementById(loadingId).innerHTML = `
+                <div class="bubble">${formatBotMessage(data.response)}</div>
+                <span class="msg-time">${getTime()}</span>`;
         } catch (err) {
             console.error('Chat error:', err);
-            document.getElementById(loadingId).innerHTML = `<div style="color:#e74c3c;">Error: ${err.message}</div>`;
+            document.getElementById(loadingId).innerHTML = `
+                <div class="bubble" style="color:#e74c3c;">Error: ${err.message}</div>`;
         }
         chatBox.scrollTop = chatBox.scrollHeight;
     }
@@ -506,59 +521,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // ══════════════════════════════════════════════════════════════
     // UTILITY FUNCTIONS
     // ══════════════════════════════════════════════════════════════
-    // ══════════════════════════════════════════════════════════════
-    // MARKDOWN FORMATTER FOR BOT MESSAGES
-    // ══════════════════════════════════════════════════════════════
     function formatBotMessage(text) {
-        if (!text) return '<p>...</p>';
-
-        let html = text
-            // Escape HTML first to prevent XSS
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-
-            // **bold**
+        if (!text) return '...';
+        return text
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-
-            // *italic*
             .replace(/\*(.+?)\*/g, '<em>$1</em>')
-
-            // `inline code`
-            .replace(/`([^`]+)`/g, '<code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:0.9em;">$1</code>')
-
-            // ### Heading 3
-            .replace(/^### (.+)$/gm, '<h4 style="margin:10px 0 4px;font-size:1em;color:var(--secondary-color);">$1</h4>')
-
-            // ## Heading 2
-            .replace(/^## (.+)$/gm, '<h3 style="margin:10px 0 4px;font-size:1.05em;color:var(--secondary-color);">$1</h3>')
-
-            // # Heading 1
-            .replace(/^# (.+)$/gm, '<h3 style="margin:10px 0 6px;font-size:1.1em;color:var(--secondary-color);">$1</h3>')
-
-            // Numbered list: 1. item
-            .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin:3px 0;">$1</li>')
-
-            // Bullet list: - item or * item
-            .replace(/^[-*]\s+(.+)$/gm, '<li style="margin:3px 0;">$1</li>')
-
-            // Wrap consecutive <li> in <ul>
-            .replace(/(<li[^>]*>.*<\/li>\n?)+/g, match =>
-                `<ul style="padding-left:18px;margin:6px 0;">${match}</ul>`)
-
-            // Line breaks → paragraphs (double newline = new paragraph)
+            .replace(/^#{1,3} (.+)$/gm, '<strong>$1</strong>')
+            .replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>')
+            .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
+            .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul style="padding-left:14px;margin:4px 0;">${m}</ul>`)
             .split(/\n{2,}/)
-            .map(para => {
-                para = para.trim();
-                if (!para) return '';
-                // Don't wrap headings or lists in <p>
-                if (para.startsWith('<h') || para.startsWith('<ul')) return para;
-                return `<p style="margin:4px 0;line-height:1.6;">${para.replace(/\n/g, '<br>')}</p>`;
-            })
+            .map(p => p.trim())
             .filter(Boolean)
+            .map(p => p.startsWith('<ul') ? p : `<p style="margin:2px 0;">${p.replace(/\n/g,'<br>')}</p>`)
             .join('');
-
-        return html || `<p>${text}</p>`;
     }
 
     function escapeHtml(text) {
