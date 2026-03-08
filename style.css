@@ -531,10 +531,13 @@ body {
 .chat-message {
     margin-bottom: 15px;
     animation: slideIn 0.3s ease;
+    display: flex;
+    flex-direction: column;
 }
 
+/* USER bubble — right aligned */
 .user-message {
-    text-align: right;
+    align-items: flex-end;
 }
 
 .user-message p {
@@ -545,19 +548,76 @@ body {
     display: inline-block;
     max-width: 75%;
     word-wrap: break-word;
+    overflow-wrap: break-word;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.bot-message p {
+/* BOT bubble — left aligned, block container for rich content */
+.bot-message {
+    align-items: flex-start;
+}
+
+.bot-message > div,
+.bot-message > p {
     background-color: var(--white);
     color: var(--text-color);
     padding: 12px 16px;
     border-radius: 18px 18px 18px 4px;
-    display: inline-block;
-    border: 1px solid #e5e7eb;
-    max-width: 75%;
+    display: block;
+    width: fit-content;
+    max-width: 80%;
     word-wrap: break-word;
+    overflow-wrap: break-word;
+    border: 1px solid #e5e7eb;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    line-height: 1.6;
+}
+
+/* Rich content inside bot bubble */
+.bot-message p {
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 4px 0;
+    display: block;
+    max-width: 100%;
+    line-height: 1.6;
+}
+
+.bot-message strong {
+    color: var(--secondary-color);
+    font-weight: 700;
+}
+
+.bot-message em {
+    font-style: italic;
+}
+
+.bot-message h3,
+.bot-message h4 {
+    margin: 8px 0 4px;
+    color: var(--secondary-color);
+    font-weight: 700;
+}
+
+.bot-message ul,
+.bot-message ol {
+    padding-left: 20px;
+    margin: 6px 0;
+}
+
+.bot-message li {
+    margin: 3px 0;
+    line-height: 1.6;
+}
+
+.bot-message code {
+    background: #f0f4f8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    font-family: monospace;
 }
 
 .chat-input-container {
