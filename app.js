@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Add loading indicator
         const loadingId = 'loading-' + Date.now();
-        chatBox.innerHTML += `<div class="chat-message bot-message" id="${loadingId}"><p>✨ Thinking...</p></div>`;
+        chatBox.innerHTML += `<div class="chat-message bot-message" id="${loadingId}"><div>Thinking...</div></div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
@@ -324,10 +324,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await res.json();
-            document.getElementById(loadingId).innerHTML = formatBotMessage(data.response);
+            document.getElementById(loadingId).innerHTML = `<div>${formatBotMessage(data.response)}</div>`;
         } catch (err) {
             console.error('Chat error:', err);
-            document.getElementById(loadingId).innerHTML = `<p style="color:#e74c3c;">❌ Error: ${err.message}</p>`;
+            document.getElementById(loadingId).innerHTML = `<div style="color:#e74c3c;">Error: ${err.message}</div>`;
         }
         chatBox.scrollTop = chatBox.scrollHeight;
     }
