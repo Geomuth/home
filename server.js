@@ -2,11 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
-const chatResponses = require('./chat.js');
 const rateLimit = require('express-rate-limit');
 const Filter = require('bad-words');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const https = require('https');
 
 // Dynamic import for franc
 let franc;
@@ -22,15 +22,13 @@ const app = express();
 // ────────────────────────────────────────────────
 // CRITICAL FIXES – MUST BE FIRST
 // ────────────────────────────────────────────────
-app.set('trust proxy', 1);  // Fixes rate-limit X-Forwarded-For warning on Vercel
+app.set('trust proxy', 1);
 
-// Manual body parser – Vercel-proof replacement for express.json()
+// Manual body parser – Vercel-proof
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     let bodyData = '';
-    req.on('data', chunk => {
-      bodyData += chunk.toString();
-    });
+    req.on('data', chunk => { bodyData += chunk.toString(); });
     req.on('end', () => {
       try {
         req.body = bodyData.trim() ? JSON.parse(bodyData) : {};
@@ -58,7 +56,9 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// MongoDB
+// ────────────────────────────────────────────────
+// MONGODB
+// ────────────────────────────────────────────────
 const MONGODB_URI = process.env.techgeo_MONGODB_URI;
 if (!MONGODB_URI) {
   console.error('❌ Missing techgeo_MONGODB_URI');
@@ -74,6 +74,9 @@ const connectWithRetry = () => {
 };
 connectWithRetry();
 
+// ────────────────────────────────────────────────
+// SCHEMAS
+// ────────────────────────────────────────────────
 const questionSchema = new mongoose.Schema({
   question: { type: String, required: true },
   timestamp: { type: String, default: () => new Date().toLocaleString() },
@@ -83,16 +86,12 @@ const questionSchema = new mongoose.Schema({
 });
 const Question = mongoose.model('Question', questionSchema);
 
-// ────────────────────────────────────────────────
-// AUTH & SUBSCRIPTION MODELS
-// ────────────────────────────────────────────────
-
 const JWT_SECRET = process.env.JWT_SECRET || 'your-very-long-random-secret-change-this-in-vercel-env';
 
 const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
-  email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
-  phoneNumber: { type: String, unique: true, sparse: true, trim: true }, // optional but unique if provided
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  phoneNumber: { type: String, unique: true, sparse: true, trim: true },
   password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
@@ -105,57 +104,43 @@ const subscriberSchema = new mongoose.Schema({
 const Subscriber = mongoose.model('Subscriber', subscriberSchema);
 
 const contactMessageSchema = new mongoose.Schema({
-  name:      { type: String, required: true, trim: true },
-  email:     { type: String, required: true, lowercase: true, trim: true },
-  subject:   { type: String, trim: true, default: '' },
-  message:   { type: String, required: true, trim: true },
+  name: { type: String, required: true, trim: true },
+  email: { type: String, required: true, lowercase: true, trim: true },
+  subject: { type: String, trim: true, default: '' },
+  message: { type: String, required: true, trim: true },
   createdAt: { type: Date, default: Date.now }
 });
 const ContactMessage = mongoose.model('ContactMessage', contactMessageSchema);
 
 // ────────────────────────────────────────────────
-// REGISTER – improved duplicate messages
+// REGISTER
 // ────────────────────────────────────────────────
-
 app.post('/api/register', async (req, res) => {
   console.log('Register hit - body:', req.body);
-
   try {
-    const body = req.body || {};
-    const { fullName, email, password, phoneNumber } = body;
-
-    if (!fullName || !email || !password) {
+    const { fullName, email, password, phoneNumber } = req.body || {};
+    if (!fullName || !email || !password)
       return res.status(400).json({ message: 'Full name, email and password are required' });
-    }
-
-    if (password.length < 6) {
+    if (password.length < 6)
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
-    }
 
     const existingEmail = await User.findOne({ email });
-    if (existingEmail) {
+    if (existingEmail)
       return res.status(409).json({ message: 'A user with this email already exists.' });
-    }
 
     if (phoneNumber) {
       const existingPhone = await User.findOne({ phoneNumber });
-      if (existingPhone) {
+      if (existingPhone)
         return res.status(409).json({ message: 'This phone number is already registered.' });
-      }
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(password, salt);
-
     const user = new User({ fullName, email, password: hashed, phoneNumber });
     await user.save();
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-
-    res.status(201).json({
-      token,
-      user: { id: user._id, fullName: user.fullName, email: user.email, phoneNumber }
-    });
+    res.status(201).json({ token, user: { id: user._id, fullName: user.fullName, email: user.email, phoneNumber } });
   } catch (err) {
     console.error('Register error:', err.message);
     res.status(500).json({ message: 'Server error during registration' });
@@ -165,34 +150,21 @@ app.post('/api/register', async (req, res) => {
 // ────────────────────────────────────────────────
 // LOGIN
 // ────────────────────────────────────────────────
-
 app.post('/api/login', async (req, res) => {
   console.log('Login hit - body:', req.body);
-
   try {
-    const body = req.body || {};
-    const { email, password } = body;
-
-    if (!email || !password) {
+    const { email, password } = req.body || {};
+    if (!email || !password)
       return res.status(400).json({ message: 'Email and password required' });
-    }
 
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    if (!match) return res.status(401).json({ message: 'Invalid credentials' });
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({
-      token,
-      user: { id: user._id, fullName: user.fullName, email: user.email, phoneNumber: user.phoneNumber }
-    });
+    res.json({ token, user: { id: user._id, fullName: user.fullName, email: user.email, phoneNumber: user.phoneNumber } });
   } catch (err) {
     console.error('Login error:', err.message);
     res.status(500).json({ message: 'Server error during login' });
@@ -200,28 +172,20 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ────────────────────────────────────────────────
-// SUBSCRIBE – improved already-subscribed message
+// SUBSCRIBE
 // ────────────────────────────────────────────────
-
 app.post('/api/subscribe', async (req, res) => {
   console.log('Subscribe hit - body:', req.body);
-
   try {
-    const body = req.body || {};
-    const { email } = body;
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const { email } = req.body || {};
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ message: 'Valid email required' });
-    }
 
     const existing = await Subscriber.findOne({ email });
-    if (existing) {
+    if (existing)
       return res.status(409).json({ message: 'You are already subscribed with this email.' });
-    }
 
-    const sub = new Subscriber({ email });
-    await sub.save();
-
+    await new Subscriber({ email }).save();
     res.status(201).json({ message: 'Subscribed successfully' });
   } catch (err) {
     console.error('Subscribe error:', err.message);
@@ -229,206 +193,188 @@ app.post('/api/subscribe', async (req, res) => {
   }
 });
 
-
 // ────────────────────────────────────────────────
 // CONTACT FORM
 // ────────────────────────────────────────────────
-
-app.post("/api/contact", async (req, res) => {
-  console.log("Contact hit - body:", req.body);
+app.post('/api/contact', async (req, res) => {
+  console.log('Contact hit - body:', req.body);
   try {
     const { name, email, subject, message } = req.body || {};
-    if (!name || !email || !message) {
-      return res.status(400).json({ message: "Name, email and message are required." });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: "Please provide a valid email address." });
-    }
-    const contact = new ContactMessage({ name, email, subject, message });
-    await contact.save();
+    if (!name || !email || !message)
+      return res.status(400).json({ message: 'Name, email and message are required.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ message: 'Please provide a valid email address.' });
+
+    await new ContactMessage({ name, email, subject, message }).save();
     console.log(`📩 New contact message from ${name} <${email}>`);
-    res.status(201).json({ message: "Message sent successfully! We will get back to you soon." });
+    res.status(201).json({ message: 'Message sent successfully! We will get back to you soon.' });
   } catch (err) {
-    console.error("Contact error:", err.message);
-    res.status(500).json({ message: "Server error. Please try again later." });
+    console.error('Contact error:', err.message);
+    res.status(500).json({ message: 'Server error. Please try again later.' });
   }
 });
 
 // ────────────────────────────────────────────────
-// CHAT & HELPERS (your original code)
+// STATIC FILES
 // ────────────────────────────────────────────────
-
 app.use(express.static(path.join(__dirname, '.')));
 
-// Preprocess chat.js responses
-const processedResponses = Object.entries(chatResponses).map(([keywords, response]) => ({
-  keywords: keywords.split('|').map(k => k.toLowerCase().trim()),
-  response,
-  originalKey: keywords
-}));
-console.log(`📚 Loaded ${processedResponses.length} response patterns`);
+// ────────────────────────────────────────────────
+// GEMINI AI SETUP
+// ────────────────────────────────────────────────
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Helper functions
-function calculateSimilarity(str1, str2) {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-  if (s1 === s2) return 100;
-  if (s1.includes(s2) || s2.includes(s1)) return 82;
-  const words1 = new Set(s1.split(/\s+/).filter(Boolean));
-  const words2 = new Set(s2.split(/\s+/).filter(Boolean));
-  const inter = [...words1].filter(x => words2.has(x)).length;
-  const union = words1.size + words2.size - inter;
-  return union === 0 ? 0 : Math.round((inter / union) * 85);
+// TechGeo business context fed to Gemini as system prompt
+const TECHGEO_SYSTEM_PROMPT = `You are GeoBot, the official AI assistant for TechGeo Solutions — a technology company based in Kirinyaga County, Kutus, Kenya.
+
+ABOUT TECHGEO:
+- Company: TechGeo Solutions
+- Location: Kirinyaga County, Kutus, Kenya
+- Email: techgeof@gmail.com
+- Phone: +254 757 579 531
+- Working Hours: Monday–Friday, 9:00 AM – 6:00 PM EAT. Closed weekends & public holidays.
+
+SERVICES WE OFFER:
+1. 💻 Web Development — Professional websites, landing pages, e-commerce, WordPress, custom sites
+2. 📱 Mobile App Development — Android & iOS apps, cross-platform (Flutter, React Native)
+3. ☁️ Cloud Solutions — AWS, Azure, Google Cloud. Hosting, migration, management
+4. 🤖 AI & Machine Learning — Chatbots, automation, data analytics, computer vision
+5. 🛒 E-Commerce Solutions — Online stores with M-Pesa, PayPal, Stripe integrations
+6. 🔧 IT Consulting — Tech strategy, digital transformation, system audits
+
+PRICING:
+- Pricing is project-based and custom. Clients should contact sales for a quote.
+- Free initial consultation available.
+- Contact: techgeof@gmail.com or +254 757 579 531
+
+YOUR BEHAVIOUR RULES:
+- You ONLY answer questions related to TechGeo's business, services, pricing, location, team, and technology topics.
+- If someone asks something completely unrelated to tech or TechGeo (e.g. cooking, politics, sports), politely redirect them back to how TechGeo can help them.
+- You respond in the SAME language the user writes in. If they write in Swahili, reply in Swahili. If English, reply in English. If they mix both, mix both.
+- Keep responses concise, friendly, and professional.
+- Always end with a helpful follow-up offer or call-to-action when relevant.
+- Never make up prices — always direct to contact for quotes.
+- Use emojis occasionally to keep the tone warm and modern.
+- If asked who made you or what AI you are, say you are GeoBot, TechGeo's assistant, and do not mention Gemini or Google.`;
+
+// Call Gemini API
+async function callGemini(userMessage) {
+  return new Promise((resolve, reject) => {
+    if (!GEMINI_API_KEY) {
+      return reject(new Error('GEMINI_API_KEY not set'));
+    }
+
+    const body = JSON.stringify({
+      system_instruction: {
+        parts: [{ text: TECHGEO_SYSTEM_PROMPT }]
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userMessage }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 512,
+        topP: 0.9
+      },
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
+      ]
+    });
+
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    };
+
+    const req = https.request(options, (response) => {
+      let data = '';
+      response.on('data', chunk => { data += chunk; });
+      response.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.candidates && parsed.candidates[0]?.content?.parts[0]?.text) {
+            resolve(parsed.candidates[0].content.parts[0].text.trim());
+          } else if (parsed.error) {
+            reject(new Error(parsed.error.message || 'Gemini API error'));
+          } else {
+            reject(new Error('Unexpected Gemini response structure'));
+          }
+        } catch (e) {
+          reject(new Error('Failed to parse Gemini response'));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(15000, () => {
+      req.destroy();
+      reject(new Error('Gemini request timed out'));
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
+
+// ────────────────────────────────────────────────
+// HELPERS
+// ────────────────────────────────────────────────
+const filter = new Filter();
+
+function checkProfanity(text) {
+  const swaBad = ['kuma', 'mbwa', 'pumbafu', 'mjinga', 'fala', 'mboro', 'mshenzi', 'mnyama', 'kiboko'];
+  const lower = text.toLowerCase();
+  return filter.isProfane(text) || swaBad.some(w => lower.includes(w));
 }
 
 async function detectLanguage(text) {
   try {
     const lower = text.toLowerCase().trim();
-    if (lower.length < 6) {
-      const swaShort = ['habari','sasa','mambo','vipi','asante','sawa','bei','wapi','simu','tovuti','app','programu','msaada'];
-      if (swaShort.some(w => lower.includes(w))) return { code: 'swa', name: 'Swahili' };
-      return { code: 'eng', name: 'English' };
+    const swaKeywords = ['habari','mambo','vipi','sasa','asante','tafadhali','bei','gharama','wapi','namba','simu','tovuti','programu','msaada','kwaheri','huduma','kampuni'];
+    if (swaKeywords.some(k => lower.includes(k))) return 'Swahili';
+    if (franc) {
+      const code = franc(text);
+      if (code === 'swa') return 'Swahili';
     }
-    const code = franc(text);
-    const swaKeywords = ['habari','mambo','vipi','sasa','asante','tafadhali','bei','gharama','wapi','namba','simu','tovuti','programu','msaada','kwaheri'];
-    if (swaKeywords.some(k => lower.includes(k)) || code === 'swa') {
-      return { code: 'swa', name: 'Swahili' };
-    }
-    return { code: 'eng', name: 'English' };
+    return 'English';
   } catch {
-    return { code: 'eng', name: 'English' };
+    return 'English';
   }
 }
 
-const filter = new Filter();
-
-function checkProfanity(text) {
-  const swaBad = ['kuma','mbwa','pumbafu','mjinga','fala','mboro','mshenzi','mnyama','kiboko'];
-  const lower = text.toLowerCase();
-  return filter.isProfane(text) || swaBad.some(w => lower.includes(w));
-}
-
-function findBestMatch(input) {
-  const norm = input.toLowerCase().trim();
-  if (!norm) return null;
-  let best = null;
-  let bestScore = 0;
-  let bestType = 'none';
-  let bestKeywords = [];
-  const priorityChecks = [
-    { keys: ['bei','price','cost','how much','pesa ngapi','bei gani','gharama','kiasi gani'], category: 'pricing' },
-    { keys: ['tovuti','website','web development','kujenga tovuti','kutengeneza tovuti','web design'], category: 'website' },
-    { keys: ['app','programu ya simu','mobile app','application','android','ios'], category: 'mobile apps' },
-    { keys: ['wapi','location','address','ofisi iko wapi','tupo wapi','mnakaa wapi'], category: 'location' },
-    { keys: ['namba','simu','phone','whatsapp','contact','wasiliana','barua pepe','email'], category: 'contact' },
-    { keys: ['saa','hours','fungua','funga','masaa ya kazi','open','closed'], category: 'hours' },
-    { keys: ['huduma','services','mnatoa nini','what do you offer'], category: 'services' },
-    { keys: ['kazi','portfolio','projects','kazi zetu','past work'], category: 'portfolio' },
-    { keys: ['ushauri','consultation','free consultation','mkakati'], category: 'consultation' },
-  ];
-  for (const p of priorityChecks) {
-    const matched = p.keys.filter(k => norm.includes(k));
-    if (matched.length > 0) {
-      const entry = processedResponses.find(r => r.originalKey.includes(p.category));
-      if (entry) {
-        const score = 88 + matched.length * 6 + matched.reduce((s, k) => s + k.length, 0) * 0.4;
-        if (score > bestScore) {
-          bestScore = score;
-          best = entry.response;
-          bestType = 'priority';
-          bestKeywords = matched;
-        }
-      }
-    }
-  }
-  if (bestScore < 70) {
-    for (const r of processedResponses) {
-      for (const kw of r.keywords) {
-        if (kw.length < 5) continue;
-        if (norm.includes(kw)) {
-          const score = 75 + kw.length * 0.9;
-          if (score > bestScore) {
-            bestScore = score;
-            best = r.response;
-            bestType = 'contains';
-            bestKeywords = [kw];
-          }
-        }
-      }
-    }
-  }
-  if (bestScore < 50) {
-    for (const r of processedResponses) {
-      let score = 0;
-      const matched = [];
-      for (const kw of r.keywords) {
-        if (kw.length < 5) continue;
-        const parts = kw.split(/\s+/);
-        for (const part of parts) {
-          if (norm.includes(part)) {
-            score += part.length > 6 ? 4 : 2.5;
-            matched.push(part);
-          }
-        }
-      }
-      if (score > bestScore && score > 12) {
-        bestScore = score;
-        best = r.response;
-        bestType = 'word';
-        bestKeywords = [...new Set(matched)];
-      }
-    }
-  }
-  if (bestScore < 30) {
-    for (const r of processedResponses) {
-      for (const kw of r.keywords) {
-        if (kw.length < 6) continue;
-        const sim = calculateSimilarity(norm, kw);
-        if (sim > 78 && sim > bestScore) {
-          bestScore = sim;
-          best = r.response;
-          bestType = 'similar';
-          bestKeywords = [kw];
-        }
-      }
-    }
-  }
-  if (best && bestScore > 18) {
-    return {
-      response: best,
-      score: Math.round(bestScore),
-      type: bestType,
-      matchedKeywords: bestKeywords
-    };
-  }
-  return null;
-}
-
-async function logUnmatched(question, langCode = 'unknown') {
+async function logQuestion(question, langName) {
   try {
     const norm = question.toLowerCase().trim();
-    let q = await Question.findOne({ question: { $regex: new RegExp(`^${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+    let q = await Question.findOne({
+      question: { $regex: new RegExp(`^${norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
     if (q) {
       q.askedCount += 1;
       q.lastAsked = new Date().toLocaleString();
       await q.save();
-      if (q.askedCount % 5 === 0) {
-        console.log(`🔥 Popular unmatched: "${question}" × ${q.askedCount}`);
-      }
     } else {
-      q = new Question({ question, language: langCode });
-      await q.save();
-      console.log(`💾 New unmatched: "${question}" (${langCode})`);
+      await new Question({ question, language: langName }).save();
+      console.log(`💾 Logged question: "${question}" (${langName})`);
     }
   } catch (err) {
-    console.error('MongoDB save failed:', err.message);
+    console.error('MongoDB log error:', err.message);
   }
 }
 
 // ────────────────────────────────────────────────
 // MAIN CHAT ENDPOINT
 // ────────────────────────────────────────────────
-
 app.post('/api/chat', async (req, res) => {
   console.log('Chat hit - body:', req.body);
 
@@ -436,53 +382,77 @@ app.post('/api/chat', async (req, res) => {
   if (!message || typeof message !== 'string' || !message.trim()) {
     return res.status(400).json({ error: 'Message required', response: null });
   }
+
   const input = message.trim();
   if (input.length > 500) {
-    return res.status(400).json({ error: 'Message too long', response: null });
+    return res.status(400).json({ error: 'Message too long (max 500 characters)', response: null });
   }
-  console.log(`\n→ ${input}`);
-  const lang = await detectLanguage(input);
-  console.log(` lang: ${lang.name}`);
+
+  console.log(`\n→ User: ${input}`);
+
+  // Profanity check
   if (checkProfanity(input)) {
     return res.json({
-      response: "Tafadhali tumia lugha safi na ya heshima. Tunaweza kukusaidia vipi kitaalamu?",
-      matched: false,
-      confidence: 0,
-      language: lang.name
+      response: 'Tafadhali tumia lugha safi na ya heshima. 🙏 Tunaweza kukusaidia vipi kitaalamu?\n\nPlease use respectful language. How can we help you professionally?',
+      language: 'mixed',
+      source: 'filter'
     });
   }
-  const match = findBestMatch(input);
-  let reply, matched = false, confidence = 0;
-  if (match) {
-    reply = match.response;
-    matched = true;
-    confidence = match.score;
-    console.log(` MATCH: ${match.type} (${confidence}%) → ${match.matchedKeywords.join(', ')}`);
-  } else {
-    await logUnmatched(input, lang.code);
-    reply =
-      "Samahani, bado sielewi swali lako vizuri 😅\n\n" +
-      "Unauliza kuhusu bei, kutengeneza tovuti, app, namba ya simu, au kitu kingine?\n\n" +
-      "Au unaweza tuwasiliana moja kwa moja:\n" +
-      "📞 +254 757 579 531\n" +
-      "📧 techgeof@gmail.com";
+
+  const language = await detectLanguage(input);
+  console.log(` Language: ${language}`);
+
+  // Log every question to MongoDB for analytics
+  await logQuestion(input, language);
+
+  // No Gemini key configured — fallback message
+  if (!GEMINI_API_KEY) {
+    console.warn('⚠️ GEMINI_API_KEY not set — returning fallback');
+    return res.json({
+      response: 'Our AI assistant is currently being set up. Please contact us directly:\n📞 +254 757 579 531\n📧 techgeof@gmail.com',
+      language,
+      source: 'fallback'
+    });
   }
-  res.json({
-    response: reply,
-    matched,
-    confidence,
-    language: lang.name
-  });
+
+  // Call Gemini
+  try {
+    console.log(' → Calling Gemini...');
+    const aiReply = await callGemini(input);
+    console.log(` ← Gemini replied (${aiReply.length} chars)`);
+
+    return res.json({
+      response: aiReply,
+      language,
+      source: 'gemini'
+    });
+
+  } catch (err) {
+    console.error('Gemini error:', err.message);
+
+    // Graceful fallback on Gemini failure
+    const fallback = language === 'Swahili'
+      ? `Samahani, msaidizi wetu wa AI ana tatizo la muda mfupi. 😔\n\nTafadhali wasiliana nasi moja kwa moja:\n📞 +254 757 579 531\n📧 techgeof@gmail.com\n\nTutakusaidia haraka iwezekanavyo!`
+      : `Sorry, our AI assistant is temporarily unavailable. 😔\n\nPlease reach us directly:\n📞 +254 757 579 531\n📧 techgeof@gmail.com\n\nWe'll get back to you as soon as possible!`;
+
+    return res.json({
+      response: fallback,
+      language,
+      source: 'fallback'
+    });
+  }
 });
 
-// Health
+// ────────────────────────────────────────────────
+// HEALTH CHECK
+// ────────────────────────────────────────────────
 app.get('/api/health', (_, res) => {
   res.json({
     status: 'ok',
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    responses: processedResponses.length,
+    gemini: GEMINI_API_KEY ? 'configured' : 'missing key',
     rateLimit: 'active',
-    profanity: 'active',
+    profanityFilter: 'active',
     langDetection: 'active'
   });
 });
@@ -494,5 +464,6 @@ app.get('*', (_, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 TechGeo server running on port ${PORT}`);
+  console.log(`🤖 Gemini AI: ${GEMINI_API_KEY ? '✅ Ready' : '❌ No API key'}`);
 });
