@@ -8,7 +8,7 @@
     "vercel-build": "echo 'No build needed'"
   },
   "dependencies": {
-    "express": "^4.19.2",
+     "express": "^4.19.2",
     "cors": "^2.8.5",
     "mongoose": "^8.0.0",
     "express-rate-limit": "^7.1.5",
