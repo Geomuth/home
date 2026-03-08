@@ -220,11 +220,11 @@ app.post('/api/contact', async (req, res) => {
 app.use(express.static(path.join(__dirname, '.')));
 
 // ────────────────────────────────────────────────
-// GEMINI AI SETUP
+// GROQ AI SETUP
 // ────────────────────────────────────────────────
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// TechGeo business context fed to Gemini as system prompt
+// TechGeo business context as system prompt
 const TECHGEO_SYSTEM_PROMPT = `You are GeoBot, the official AI assistant for TechGeo Solutions — a technology company based in Kirinyaga County, Kutus, Kenya.
 
 ABOUT TECHGEO:
@@ -255,43 +255,32 @@ YOUR BEHAVIOUR RULES:
 - Always end with a helpful follow-up offer or call-to-action when relevant.
 - Never make up prices — always direct to contact for quotes.
 - Use emojis occasionally to keep the tone warm and modern.
-- If asked who made you or what AI you are, say you are GeoBot, TechGeo's assistant, and do not mention Gemini or Google.`;
+- If asked who made you or what AI you are, say you are GeoBot, TechGeo's assistant. Do not mention Groq, Meta, or Llama.`;
 
-// Call Gemini API using native fetch (Node 18+)
-async function callGemini(userMessage) {
-  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-  // Inject system prompt as the first user/model exchange so it works on all plans
-  const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: `[SYSTEM INSTRUCTIONS - follow these always]\n${TECHGEO_SYSTEM_PROMPT}\n[END SYSTEM INSTRUCTIONS]\n\nUser message: ${userMessage}` }]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 512,
-      topP: 0.9
-    },
-    safetySettings: [
-      { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_HATE_SPEECH',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT',  threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
-    ]
-  };
+// Call Groq API using native fetch (Node 18+)
+async function callGroq(userMessage) {
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: TECHGEO_SYSTEM_PROMPT },
+          { role: 'user',   content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 512,
+        top_p: 0.9
+      }),
       signal: controller.signal
     });
 
@@ -300,17 +289,17 @@ async function callGemini(userMessage) {
 
     if (!response.ok) {
       const msg = data?.error?.message || `HTTP ${response.status}`;
-      throw new Error(`Gemini API error: ${msg}`);
+      throw new Error(`Groq API error: ${msg}`);
     }
 
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Empty response from Gemini');
+    const text = data?.choices?.[0]?.message?.content;
+    if (!text) throw new Error('Empty response from Groq');
 
     return text.trim();
 
   } catch (err) {
     clearTimeout(timeout);
-    if (err.name === 'AbortError') throw new Error('Gemini request timed out after 15s');
+    if (err.name === 'AbortError') throw new Error('Groq request timed out after 15s');
     throw err;
   }
 }
@@ -393,9 +382,9 @@ app.post('/api/chat', async (req, res) => {
   // Log every question to MongoDB for analytics
   await logQuestion(input, language);
 
-  // No Gemini key configured — fallback message
-  if (!GEMINI_API_KEY) {
-    console.warn('⚠️ GEMINI_API_KEY not set — returning fallback');
+  // No Groq key configured — fallback message
+  if (!GROQ_API_KEY) {
+    console.warn('⚠️ GROQ_API_KEY not set — returning fallback');
     return res.json({
       response: 'Our AI assistant is currently being set up. Please contact us directly:\n📞 +254 757 579 531\n📧 techgeof@gmail.com',
       language,
@@ -403,11 +392,11 @@ app.post('/api/chat', async (req, res) => {
     });
   }
 
-  // Call Gemini
+  // Call Groq
   try {
-    console.log(' → Calling Gemini...');
-    const aiReply = await callGemini(input);
-    console.log(` ← Gemini replied (${aiReply.length} chars)`);
+    console.log(' → Calling Groq...');
+    const aiReply = await callGroq(input);
+    console.log(` ← Groq replied (${aiReply.length} chars)`);
 
     return res.json({
       response: aiReply,
@@ -416,7 +405,7 @@ app.post('/api/chat', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Gemini error:', err.message);
+    console.error('❌ Groq error:', err.message);
 
     // Graceful fallback on Gemini failure
     const fallback = language === 'Swahili'
@@ -438,7 +427,8 @@ app.get('/api/health', (_, res) => {
   res.json({
     status: 'ok',
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    gemini: GEMINI_API_KEY ? 'configured' : 'missing key',
+    gemini: undefined,
+    groq: GROQ_API_KEY ? 'configured' : 'missing key',
     rateLimit: 'active',
     profanityFilter: 'active',
     langDetection: 'active'
@@ -453,5 +443,5 @@ app.get('*', (_, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 TechGeo server running on port ${PORT}`);
-  console.log(`🤖 Gemini AI: ${GEMINI_API_KEY ? '✅ Ready' : '❌ No API key'}`);
+  console.log(`🤖 Groq AI: ${GROQ_API_KEY ? '✅ Ready' : '❌ No API key'}`);
 });
