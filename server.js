@@ -261,7 +261,7 @@ YOUR BEHAVIOUR RULES:
 async function callGemini(userMessage) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   // Inject system prompt as the first user/model exchange so it works on all plans
   const body = {
