@@ -284,7 +284,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function toggleSendButton() {
-        sendBtn.disabled = !userInput?.value.trim();
+        const len = userInput?.value.trim().length || 0;
+        sendBtn.disabled = len === 0;
+        // Show counter when getting close to limit
+        let counter = document.getElementById('charCounter');
+        if (!counter) {
+            counter = document.createElement('span');
+            counter.id = 'charCounter';
+            counter.style.cssText = 'font-size:11px;color:#888;position:absolute;bottom:22px;right:60px;pointer-events:none;';
+            userInput.parentElement.style.position = 'relative';
+            userInput.parentElement.appendChild(counter);
+        }
+        counter.textContent = len > 200 ? `${len}/300` : '';
+        counter.style.color = len > 270 ? '#e74c3c' : '#888';
     }
 
     function getTime() {
@@ -295,6 +307,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendMessage() {
         const text = userInput.value.trim();
         if (!text) return;
+
+        // Frontend character limit — block before sending
+        if (text.length > 300) {
+            showNotification('Message too long. Please keep it under 300 characters.', 'error');
+            return;
+        }
 
         // User bubble
         chatBox.innerHTML += `
@@ -332,7 +350,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     showNotification('Session expired. Please log in again.', 'error');
                     return;
                 }
-                throw new Error('Server error');
+                // Read the actual error message from server
+                const errData = await res.json().catch(() => ({}));
+                const errMsg = errData.error || errData.message || 'Something went wrong. Please try again.';
+                document.getElementById(loadingId).innerHTML = `
+                    <div class="bubble" style="color:#e74c3c;">${escapeHtml(errMsg)}</div>`;
+                return;
             }
 
             const data = await res.json();
@@ -342,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Chat error:', err);
             document.getElementById(loadingId).innerHTML = `
-                <div class="bubble" style="color:#e74c3c;">Error: ${err.message}</div>`;
+                <div class="bubble" style="color:#e74c3c;">Connection error. Please check your internet and try again.</div>`;
         }
         chatBox.scrollTop = chatBox.scrollHeight;
     }
