@@ -40,10 +40,28 @@
     </nav>
 
     <!-- Hero Section -->
-    <section class="hero" id="home">
+   <section class="hero" id="home">
         <div class="container hero-content">
             <h2 class="fade-in-up">Discover the Future of Technology</h2>
             <p class="fade-in-up delay-1">Empowering your digital journey with cutting-edge solutions and expert insights.</p>
+            
+            <div class="clock-wrapper fade-in-up delay-1">
+                <div class="analog-clock">
+                    <div class="hour-marks">
+                        <span class="mark m12">12</span><span class="mark m1">1</span>
+                        <span class="mark m2">2</span><span class="mark m3">3</span>
+                        <span class="mark m4">4</span><span class="mark m5">5</span>
+                        <span class="mark m6">6</span><span class="mark m7">7</span>
+                        <span class="mark m8">8</span><span class="mark m9">9</span>
+                        <span class="mark m10">10</span><span class="mark m11">11</span>
+                    </div>
+                    <div class="clock-face-dot"></div>
+                    <div class="clock-hand hour-hand"></div>
+                    <div class="clock-hand min-hand"></div>
+                    <div class="clock-hand sec-hand"></div>
+                </div>
+            </div>
+
             <button class="cta-button fade-in-up delay-2" onclick="document.getElementById('message').click()">Explore with our AI Assistant</button>
         </div>
     </section>
@@ -408,5 +426,23 @@
 
     <!-- Scripts -->
     <script src="app.js"></script>
+    <script>
+        function runClock() {
+            const now = new Date();
+            const h = now.getHours();
+            const m = now.getMinutes();
+            const s = now.getSeconds();
+
+            const hDeg = (h % 12) * 30 + (m / 2);
+            const mDeg = m * 6;
+            const sDeg = s * 6;
+
+            document.querySelector('.hour-hand').style.transform = `translateX(-50%) rotate(${hDeg}deg)`;
+            document.querySelector('.min-hand').style.transform = `translateX(-50%) rotate(${mDeg}deg)`;
+            document.querySelector('.sec-hand').style.transform = `translateX(-50%) rotate(${sDeg}deg)`;
+        }
+        setInterval(runClock, 1000);
+        runClock();
+    </script>
 </body>
 </html>
