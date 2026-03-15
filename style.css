@@ -16,7 +16,7 @@
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     --transition: all 0.3s ease;
 }
-/* --- Integrated Clock Styling --- */
+/* --- Integrated Clock with Image Background --- */
 .clock-wrapper {
     display: flex;
     justify-content: center;
@@ -24,27 +24,40 @@
 }
 
 .analog-clock {
-    width: 200px;
-    height: 200px;
-    border: 4px solid var(--white);
+    width: 220px;
+    height: 220px;
+    border: 5px solid var(--white);
     border-radius: 50%;
     position: relative;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(5px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    /* BACKGROUND IMAGE SETTINGS */
+    background-image: url('logo.jpeg'); 
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+/* Dark overlay to make hands visible over the image */
+.analog-clock::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.4); 
+    border-radius: 50%;
 }
 
 .mark {
     position: absolute;
     font-family: 'Segoe UI', sans-serif;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--white);
     transform: translate(-50%, -50%);
+    z-index: 5;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
 }
 
 /* Clock Number Positions */
-.m12 { top: 10%; left: 50%; color: var(--accent-color); }
+.m12 { top: 10%; left: 50%; color: var(--primary-color); }
 .m3  { top: 50%; left: 90%; }
 .m6  { top: 90%; left: 50%; }
 .m9  { top: 50%; left: 10%; }
@@ -57,8 +70,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     background: var(--white);
     border-radius: 50%;
     transform: translate(-50%, -50%);
@@ -75,39 +88,35 @@
 }
 
 .hour-hand {
-    width: 6px;
-    height: 50px;
-    background: var(--accent-color);
+    width: 7px;
+    height: 55px;
+    background: var(--white);
     z-index: 7;
 }
 
 .min-hand {
     width: 4px;
-    height: 75px;
-    background: var(--white);
+    height: 85px;
+    background: var(--primary-color);
     z-index: 8;
 }
 
 .sec-hand {
     width: 2px;
-    height: 85px;
-    background: var(--primary-color);
+    height: 95px;
+    background: #ff4757; /* Contrast color for second hand */
     z-index: 9;
 }
 
 /* Mobile responsive clock */
 @media (max-width: 480px) {
     .analog-clock {
-        width: 150px;
-        height: 150px;
+        width: 180px;
+        height: 180px;
     }
-    .hour-hand { height: 35px; }
-    .min-hand { height: 55px; }
-    .sec-hand { height: 65px; }
-    .mark { font-size: 11px; }
-}
-html {
-    scroll-behavior: smooth;
+    .hour-hand { height: 45px; }
+    .min-hand { height: 65px; }
+    .sec-hand { height: 75px; }
 }
 
 body {
